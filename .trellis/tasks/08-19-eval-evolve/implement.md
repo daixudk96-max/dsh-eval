@@ -64,17 +64,22 @@ python ./.trellis/scripts/task.py list
 
 ## 5. 元数据核对（start 前）
 
+已就绪（2026-08-19）：
+- [x] git 仓库：`E:\github\dsh-eval` 已 `git init -b main` 并初始提交（`4ce49ec`），工作区干净。
+- [x] `task.json`：scope=`eval+evolution`、branch=`eval-evolve`、base_branch=`main`、package=`dsh-eval`（meta）、priority=P1、assignee=daixu。
+- [x] 全部 7 个任务 `task.py validate` 通过（jsonl 上下文已补齐）。
+- [x] 6 个子任务已建并链接（`add-subtask`，见 prd.md 任务清单）。
+
+start 时执行：
 - [ ] PRD 最终确认（用户对本规划 summary 的显式批准）。
-- [ ] `task.json`：scope / branch / package 补全（见 §6 命令）。
+- [ ] `git checkout -b eval-evolve`（实现分支，消除 validate 的 branch 不存在警告）。
 - [ ] 确认 web profile 下 dsh-eval 的 rc 版本 peer 兼容（M1）。
 - [ ] 确认 production approval 策略（当前会话 never；生产须 human answerer）。
 
 ## 6. start 前命令
 
 ```powershell
-python ./.trellis/scripts/task.py set-scope 08-19-eval-evolve "eval+evolution"
-python ./.trellis/scripts/task.py set-branch 08-19-eval-evolve eval-evolve
-python ./.trellis/scripts/task.py set-base-branch 08-19-eval-evolve main
+git checkout -b eval-evolve
 python ./.trellis/scripts/task.py validate 08-19-eval-evolve
 ```
 
