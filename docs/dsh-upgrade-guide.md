@@ -76,7 +76,7 @@ git rev-parse HEAD                     # 验证 = 99f6f02fec / rc.7
 | `@aaravarr/dsh-subagent-max@0.1.1` | 无需处理 —— rc.7 满足其 `^0.1.0-rc.6` peer，告警自愈 |
 | `dsh-plugin-clinic@0.1.2` | 无需处理 —— 同上自愈 |
 | `@banana-peeljj12/dsh-trellis@0.1.0-rc.4` | 无需处理 —— 同上自愈 |
-| `@dsh-external/workflow@0.1.2` | **停用或升级到适配 rc.7 的新版本**；无新版则：`node E:\github\dsh\apps\cli\lib\bin.js plugin --profile web remove @dsh-external/workflow`（以 `bin.js plugin --help` 实际子命令为准） |
+| `@dsh-external/workflow@0.1.2` | **停用或升级到适配 rc.7 的新版本**；无新版则：`node E:\github\dsh\apps\cli\lib\bin.js plugin --profile web remove @dsh-external/workflow`（已核实：`dsh plugin` 是 profile 场景下 pnpm 的透明包装，子命令为 pnpm 的 add/remove/update/install 等） |
 | `@dsh-adaptive/*`、`@xilin3/dsh-prompt-persona` | 保留观察（`cordis not installed` 类解析告警，与版本无关） |
 | `dsh-eval`（尚未安装） | M1 结论：rc.7 ≥ rc.6，`dsh plugin --profile web add dsh-eval` 路线可选；可后置决定 |
 
