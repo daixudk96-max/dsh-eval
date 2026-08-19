@@ -3,7 +3,7 @@
   "name": "eval-adapter-spike",
   "title": "M1 评测闭环 Spike（dsh-eval 兼容性 go/no-go + 最小 benchmark 跑通）",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

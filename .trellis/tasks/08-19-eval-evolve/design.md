@@ -48,8 +48,9 @@
 - 底层依赖：`ctx.get('agentPresets')`（copy/resolve/mount）；mount 时始终传 **physical revisionId**，Logical Preset 仅是产品层 ID。
 
 ### 2.2 eval-adapter（= ctx.eval，统一评测真值）→ 子任务 `08-19-eval-adapter-spike`
-- 执行底座候选：`hccccc01333/dsh-eval`（benchmark YAML、headless dsh 子进程、trace 指标、A/B、replay、import）；补充 PerryLink 的 dsh-eval CLI 语义。
-- **兼容性 go/no-go 是本任务前置**：固定 commit SHA、许可证、直接依赖 vs 包装 CLI vs 抽取核心、Windows 路径/子进程行为、DSH headless Session 接入；失败则自研最小 runner（见 ADR D2）。
+- **M1 决策（2026-08-19，见 `research/m1-spike-report.md`）**：当前 DSH 为 `0.1.0-rc.5`，`dsh-eval@0.3.0`（MIT）peer 要求 `@deepseek-ai/* ^0.1.0-rc.6` → 直接依赖 **NO-GO**。
+  - **本轮采用**：自研最小 runner 作为执行层（benchmark YAML schema 对齐 dsh-eval 0.3.0：`name/model/profile/command/trials/timeoutMs/seed/cases(id,prompt,workspace,expected.tool|check)/pricing`），以 headless DSH 子进程执行、收集 trace、产出 `EvaluationRun` 契约。
+  - **切换点**：DSH 升级至 `rc.6+` 后，安装 `dsh-eval@0.3.0`（`dsh plugin --profile eval add dsh-eval`）走 wrap-CLI 路线；最小 runner 保留为 fallback/离线路径。
 - 输出契约：`EvaluationRun { id, subject, mode, evaluationEpochId, planIds, scores, assertions, evidenceTreeRef, failureSignatures, artifacts }`。
 - 两模式：Discovery（允许动态、产出诊断）vs Validation（Frozen，仅供 Gate）。
 - 硬规则：确定性事实（exitCode/schema/digest/tool error/指标）由代码判定；LLM judge 仅处理语义维度（需求遵循/过度实现/误导性说明）。
@@ -99,7 +100,7 @@ SessionHeader { logicalPreset; revision; presetDigest; evolutionRunId?; evaluati
 | # | 决策 | 选择 | 理由 |
 |---|------|------|------|
 | D1 | 评测与自进化 | 分离两个信任域，Controller 编排 | 防止 Candidate 改评分真值；评测可独立复用 |
-| D2 | 统一评测真值 | 自研 `ctx.eval`，以 `hccccc01333/dsh-eval` 为执行底座（M1 go/no-go 验证）；失败 fallback 自研最小 runner | 其能力与文档描述吻合；非 fork dsh-auto-review |
+| D2 | 统一评测真值 | 自研最小 runner（本轮，因 DSH rc.5 < dsh-eval peer rc.6 直装 NO-GO）；DSH 升 rc.6+ 后切换 `dsh-eval@0.3.0` wrap-CLI | 证据见 `research/m1-spike-report.md`；非 fork dsh-auto-review |
 | D3 | Mutation 引擎 | entry 级用 `ZK/dsh-continual-evolve`；Profile 级闭环参照 `Lhy723/dsh-self-evolution` | ZK 改造量大；Lhy723 更贴近整 Preset 版本闭环 |
 | D4 | 权限 | Host Service 内 capability 检查 + Preset 工具面双重 | Preset 名称不是安全边界 |
 | D5 | 版本发布 | Immutable Revision + CAS current pointer（内容寻址 + WAL） | O(1) Promote/Rollback；防 TOCTOU；崩溃可重放 |

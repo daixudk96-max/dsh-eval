@@ -1,0 +1,26 @@
+# 最小评测 benchmark（M1 占位，schema 对齐 dsh-eval 0.3.0）
+
+# 说明：当前 DSH 为 rc.5，dsh-eval peer 要求 rc.6（见 research/m1-spike-report.md），
+# 故本文件按 dsh-eval README 的 schema 编写，作为自研最小 runner 的契约样例；
+# 执行能力由 M2+ 自研 runner 提供（dsh eval run 在本机暂不可用）。
+
+name: eval-spike-demo
+model: deepseek-v4
+profile: headless
+command: [dsh]
+trials: 1
+timeoutMs: 600000
+seed: 42
+cases:
+  - id: smoke-001
+    prompt: "Reply with exactly: OK"
+    workspace: ./fixtures/smoke
+    expected:
+      tool: bash
+      check: ./check.sh
+pricing:
+  deepseek-v4:
+    inputUsdPerMTokens: 0.27
+    cacheReadUsdPerMTokens: 0.07
+    cacheWriteUsdPerMTokens: 0.27
+    outputUsdPerMTokens: 1.10
