@@ -1,0 +1,24 @@
+{
+  "name": "request_evolution",
+  "description": "请求一次进化（业务 Agent 唯一进化入口，异步，需显式用户确认后才会被 Controller 接管 gate/promote）。返回 requestId。业务 Agent 无任何写 Candidate / promote 能力。",
+  "actions": ["submit", "status", "result"],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": { "enum": ["submit", "status", "result"] },
+      "requestId": { "type": "string" },
+      "idempotencyKey": { "type": "string" },
+      "subject": { "type": "string", "description": "被进化的 preset logicalId" },
+      "triggerEvaluationRunId": { "type": "string", "description": "作为进化依据的评测 run" },
+      "failureClusters": { "type": "array", "items": { "type": "string" }, "description": "手工选择的 FailureCluster" },
+      "proposal": { "type": "string" }
+    },
+    "required": ["action"]
+  },
+  "returns": {
+    "requestId": { "type": "string" },
+    "status": { "enum": ["queued", "running", "awaiting_approval", "succeeded", "failed", "cancelled", "timeout"] },
+    "resultRef": { "type": "string", "description": "EvolutionRun id" }
+  },
+  "capability": "business.request_evolution"
+}

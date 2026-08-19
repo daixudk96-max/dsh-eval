@@ -3,7 +3,7 @@
   "name": "security-hardening",
   "title": "M6 强化（blind holdout、统计 INCONCLUSIVE、GC 保护、范式后置）",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

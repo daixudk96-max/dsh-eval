@@ -1,0 +1,31 @@
+# system-evaluator — 只读评测工作台 Preset
+
+# 信任域：只读评测。不可写业务 Preset / Candidate / Rubric / Benchmark / Gate / current pointer。
+# 真正的权限边界在 Host Service capability 层强制（见 HOST-CAPABILITIES.md），本文件只定义工具面可见性。
+# 安装：packages/system-presets/install.ps1（复制到 $DSH_HOME/.agent-presets/system-evaluator/）
+
+name: system-evaluator
+description: 只读评测工作台 — 发起/查看 EvaluationRun 与 Evidence，产出评测报告。
+
+# 工具面（只读评测能力；无任何 Candidate / current 写工具）
+tools:
+  - name: evaluation.run
+    description: 发起一次评测（Discovery 或 Validation 模式），返回 runId
+    readOnly: true
+  - name: evaluation.status
+    description: 查询 EvaluationRun 状态与结果
+    readOnly: true
+  - name: evaluation.report
+    description: 生成评测报告（scores/assertions/metrics）
+    readOnly: true
+  - name: evaluation.failures
+    description: 读取失败签名 / FailureCluster（脱敏聚合）
+    readOnly: true
+
+# 明确禁止（工具面不暴露，Host capability 层亦拒绝）
+forbidden:
+  - "candidate.*"
+  - "preset.*"
+  - "promote"
+  - "rollback"
+  - "evolve.*"

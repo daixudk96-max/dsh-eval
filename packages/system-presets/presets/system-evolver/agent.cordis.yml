@@ -1,0 +1,34 @@
+# system-evolver — 只写 Candidate 的进化工作台 Preset
+
+# 信任域：只写 Candidate。不可写 Source Revision / Eval Core / Rubric / Benchmark / Gate / current pointer。
+# 真正的权限边界在 Host Service capability 层强制（见 HOST-CAPABILITIES.md），本文件只定义工具面可见性。
+# 安装：packages/system-presets/install.ps1（复制到 $DSH_HOME/.agent-presets/system-evolver/）
+
+name: system-evolver
+description: 进化工作台 — RCA → Proposal → Mutation → Candidate（staging 隔离区）。
+
+# 工具面（只写 Candidate；无 current 写权）
+tools:
+  - name: evolution.propose
+    description: 基于 FailureCluster 生成进化提案（RCA → Proposal）
+    readOnly: false
+  - name: evolution.mutate
+    description: 对 Candidate 应用 entry 级 mutation（prompt/memory/skill/subagent）
+    readOnly: false
+  - name: evolution.candidate
+    description: 创建/查看 Candidate（staging 隔离区，DRAFT 可写）
+    readOnly: false
+  - name: evolution.run
+    description: 提交 Candidate 进入同 Frozen Epoch 验证
+    readOnly: false
+
+# 明确禁止（工具面不暴露，Host capability 层亦拒绝）
+forbidden:
+  - "preset.promote"
+  - "preset.rollback"
+  - "preset.current"
+  - "evaluation.*"   # evolver 只消费脱敏失败分类，不能直接读评测真值/答案/holdout
+  - "holdout.*"
+
+# Blind holdout 服务级隔离：holdout 原始 case / 答案 / evaluator 内部 Prompt
+# 不对 evolver 暴露（Host capability + 文件系统隔离，见 M6）。

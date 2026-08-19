@@ -1,0 +1,24 @@
+{
+  "name": "request_evaluation",
+  "description": "请求一次评测（业务 Agent 唯一评测入口，异步）。返回 requestId；通过同工具的 status/result 操作或 Session 事件获取结果。业务 Agent 无任何底层评测能力。",
+  "actions": ["submit", "status", "result"],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": { "enum": ["submit", "status", "result"] },
+      "requestId": { "type": "string", "description": "status/result 时的任务 id" },
+      "idempotencyKey": { "type": "string", "description": "幂等键：同键重复 submit 不重复执行" },
+      "subject": { "type": "string", "description": "评测对象（preset logicalId 或 workspace 路径）" },
+      "benchmarkRef": { "type": "string", "description": "benchmark/evalPlan 引用" },
+      "mode": { "enum": ["discovery", "validation"] },
+      "budget": { "type": "object", "properties": { "maxTokens": { "type": "number" }, "maxRuns": { "type": "number" }, "deadline": { "type": "string" } } }
+    },
+    "required": ["action"]
+  },
+  "returns": {
+    "requestId": { "type": "string" },
+    "status": { "enum": ["queued", "running", "succeeded", "failed", "cancelled", "timeout"] },
+    "resultRef": { "type": "string", "description": "EvaluationRun id" }
+  },
+  "capability": "business.request_evaluation"
+}

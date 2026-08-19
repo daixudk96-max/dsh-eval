@@ -3,7 +3,7 @@
   "name": "request-api-integration",
   "title": "M5 入口收窄（业务 Preset 仅 request_evaluation / request_evolution）",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
