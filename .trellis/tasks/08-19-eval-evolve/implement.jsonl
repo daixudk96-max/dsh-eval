@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/08-19-eval-evolve/prd.md", "reason": "PRD R1-R10 AC map"}
+{"file": ".trellis/tasks/08-19-eval-evolve/design.md", "reason": "Design ADR D1-D9 contracts A-E"}
+{"file": ".trellis/tasks/08-19-eval-evolve/implement.md", "reason": "Integration execution + AC->Test"}
+{"file": "final-report.md", "reason": "Verified findings report"}

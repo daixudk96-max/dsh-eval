@@ -1,0 +1,35 @@
+{
+  "id": "eval-evolve",
+  "name": "eval-evolve",
+  "title": "评测与自进化系统（Eval + Evolution）落地",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": "eval+evolution",
+  "package": null,
+  "priority": "P2",
+  "creator": "daixu",
+  "assignee": "daixu",
+  "createdAt": "2026-08-19",
+  "completedAt": null,
+  "branch": "eval-evolve",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-19-eval-adapter-spike",
+    "08-19-preset-registry",
+    "08-19-evolution-controller",
+    "08-19-system-presets",
+    "08-19-request-api-integration",
+    "08-19-security-hardening"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "package": "dsh-eval"
+  }
+}
