@@ -3,7 +3,7 @@
   "name": "preset-registry",
   "title": "M2 版本骨架（preset-registry Service：logical/current/rollback/digest）",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
