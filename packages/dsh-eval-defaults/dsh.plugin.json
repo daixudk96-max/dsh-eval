@@ -1,0 +1,13 @@
+{
+  "id": "dsh-eval-defaults",
+  "version": "0.1.0",
+  "main": "lib/index.js",
+  "description": "Eval defaults: independent default provider/model/reasoning effort for dsh-eval evaluations, persisted in settings.",
+  "engines": {
+    "dsh": ">=0.0.1"
+  },
+  "contributes": {
+    "tools": [],
+    "skills": []
+  }
+}

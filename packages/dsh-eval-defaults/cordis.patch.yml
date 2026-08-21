@@ -1,0 +1,6 @@
+# dsh-eval-defaults bundle patch: mount the host plugin under its package
+# name, resolved through the profile's node_modules. The client half is
+# discovered via the same row's dsh.client declaration + exports["./client"].
+- insert:
+    - id: dsh-eval-defaults
+      name: dsh-eval-defaults

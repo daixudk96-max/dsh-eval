@@ -83,8 +83,11 @@ export interface EvalServices {
     listProviders(): readonly (string | { id: string })[]
     listConfigurableProviders(): readonly { provider: string; settingsNs: string; settingsPath: readonly string[] }[]
   } | undefined
-  /** rc.8 `settings` service for provider subtree extraction. */
-  settings?: { describe(options: { redactSecrets: boolean }): readonly { ns: string; value: unknown; user?: unknown }[] } | undefined
+  /** rc.8 `settings` service for provider subtree extraction + eval-defaults. */
+  settings?: {
+    describe(options: { redactSecrets: boolean }): readonly { ns: string; value: unknown; user?: unknown }[]
+    get(ns: string): unknown
+  } | undefined
   /** rc.8 `credentials` service for per-trial credential resolution. */
   credentials?: { resolve(ref: string): Promise<string | undefined> } | undefined
   /** The current process (for launcher resolution); tests substitute a fixture. */
@@ -153,7 +156,7 @@ export async function executeEval(
     const hasExplicitCommand = (values.dshCommand?.length ?? 0) > 0 || (benchmark.command?.length ?? 0) > 0
     let effectiveBenchmark = benchmark
     if (services.agentDefaultModel !== undefined && !hasExplicitCommand) {
-      const selection = resolveModelSelection(benchmark, services.agentDefaultModel)
+      const selection = resolveModelSelection(benchmark, services.agentDefaultModel, services.settings)
       runOptions.selection = selection
       // Normalise the judge against the effective selection (M-3).
       if (benchmark.judge !== undefined) {
