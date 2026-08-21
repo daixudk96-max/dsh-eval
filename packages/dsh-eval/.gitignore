@@ -1,0 +1,10 @@
+# Build artifacts (from the disposable SDK mirror; never committed/packed)
+lib/
+dist/
+
+# Disposable SDK mirror — created by scripts/prepare-sdk.mjs; never committed
+# or packed. Rebuild = delete this dir and rerun prepare-sdk.mjs.
+.sdk/
+
+# Editor / OS
+node_modules/

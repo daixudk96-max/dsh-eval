@@ -1,0 +1,11 @@
+{
+  "title": "dsh-eval 独立可安装插件",
+  "status": "in_progress",
+  "work": {
+    "type": "feat",
+    "mode": "standard",
+    "stage": "impl",
+    "execution_lane": "standard"
+  },
+  "description": "以 hccccc01333/dsh-eval@47f39d7c 为基线保留 runner 及评测语义，修复 0.2.0/0.3.0 files 白名单致 lib/*.js 缺失的闭包缺陷，产出 .tgz/GitHub-release-ready 独立产物；以 rc.8 的 DEFAULT_PROFILE_BUNDLES(dsh-base)/healProfilesModuleFallback/profile add+reconcile 为稳定宿主 ABI 实现一次 dsh plugin --profile add 安装与一次性 DSH_HOME E2E，窄适配仅在真实兼容失败时引入。"
+}

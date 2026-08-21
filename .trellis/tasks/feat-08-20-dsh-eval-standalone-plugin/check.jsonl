@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/feat-08-20-dsh-eval-standalone-plugin/prd.md", "reason": "Verify every acceptance gate C/L/M/S/G/A/H is observable and met (incl. L-3 omitted-command success, L-5 negative, M-5 loader settlement, S-3 raw-headers fail-closed, S-5 provider scope, G-D dual-root/whole-test-root scan)."}
+{"file": ".trellis/tasks/feat-08-20-dsh-eval-standalone-plugin/design.md", "reason": "Verify the implementation is based on the APPROVED design, and the H gate (H-1 draft approved by user + H-2 passed design-review) was satisfied BEFORE task.py start; not a permanent 'status is draft' gate."}
+{"file": ".trellis/tasks/feat-08-20-dsh-eval-standalone-plugin/research/compatibility-and-packaging.md", "reason": "Verify implementation evidence matches recorded rc.8 contracts (sections 7-9) and packaging closure fix; shipping path packages/dsh-eval."}
+{"file": "research/dsh-eval-src/packages/eval/tests/fixtures/fake-dsh.mjs", "reason": "E2E-A fixture: verify offline run uses it and is NOT claimed as real-model evidence."}
+{"file": "research/dsh-eval-src/packages/eval/src/benchmark.ts", "reason": "Verify default command/launcher (omitted command -> current CLI argv), provider/model selection, judge defaults match design."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate baseline for build/test/package/E2E evidence to pass trellis-check."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Sanity-check JSONL/env boundary handling in credential/config bridge against cross-layer discipline."}
