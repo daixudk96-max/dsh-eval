@@ -8,7 +8,7 @@
  *
  * Flow (matches the design's disposable-mirror contract, pnpm-only):
  *   1. Verify the real DSH checkout HEAD == the pinned rc.8 SHA
- *      (141eb6fef83422698aef7a981029e843e8161534) and that `git status` is clean.
+ *      (70195e98c1c311a8eb9e5b721c6cf3b8552740b7) and that `git status` is clean.
  *   2. Expand the tracked DSH workspace into the ignored `packages/dsh-eval/.sdk/dsh`
  *      via read-only `git archive` (never writes into E:\github\dsh).
  *   3. In the pristine mirror (no eval member yet) run `pnpm install --frozen-lockfile`
@@ -39,7 +39,7 @@ const SDK_DIR = join(PACKAGE_ROOT, '.sdk')
 const DSH_MIRROR = join(SDK_DIR, 'dsh')
 const DIST_DIR = join(PACKAGE_ROOT, 'dist')
 
-const PINNED_DSH_SHA = '141eb6fef83422698aef7a981029e843e8161534'
+const PINNED_DSH_SHA = '70195e98c1c311a8eb9e5b721c6cf3b8552740b7'
 
 // On Windows, pnpm/npm are .cmd shims that must run through the shell
 // (execFileSync of a .cmd EINVALs without shell:true). git/tar/node are real

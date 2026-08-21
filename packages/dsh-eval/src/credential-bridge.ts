@@ -16,8 +16,11 @@ import type { ModelSelection } from './model.ts'
 
 /** Narrow contract of the rc.8 `credentials` public service. */
 interface CredentialsProvider {
-  /** Resolve one credential reference to its value (per operation). */
-  resolve(ref: string): Promise<string | undefined>
+  /**
+   * Resolve one credential reference. rc.8 resolves to a detached result
+   * object `{ value, source }`; a bare string is accepted for compatibility.
+   */
+  resolve(ref: string): Promise<string | { value?: string; source?: string } | undefined>
 }
 
 /** The credential plan for one run (ref fixed per run). */
@@ -48,15 +51,24 @@ export function discoverCredentialRef(
 
 /**
  * Resolve the credential value immediately before one trial spawn.
+ *
+ * rc.8 `credentials.resolve(ref)` returns a detached result object
+ * `{ value, source }` (not a bare string); injecting the object into the
+ * child env would stringify to `[object Object]` and fail the provider's
+ * header-safety check as INVALID_CREDENTIAL. Normalize to the string value.
  * @param ref - the credential ref from the run plan.
  * @param credentials - the credentials public service.
- * @returns the value, or undefined when the ref is unresolved.
+ * @returns the raw value, or undefined when the ref is unresolved.
  */
 export async function resolveCredentialValue(
   ref: string,
   credentials: CredentialsProvider,
 ): Promise<string | undefined> {
-  return credentials.resolve(ref)
+  const resolved = await credentials.resolve(ref)
+  if (resolved === undefined) return undefined
+  if (typeof resolved === 'string') return resolved
+  const candidate = resolved.value
+  return typeof candidate === 'string' ? candidate : undefined
 }
 
 /**

@@ -89,7 +89,9 @@ export interface EvalServices {
     get(ns: string): unknown
   } | undefined
   /** rc.8 `credentials` service for per-trial credential resolution. */
-  credentials?: { resolve(ref: string): Promise<string | undefined> } | undefined
+  credentials?: {
+    resolve(ref: string): Promise<string | { value?: string; source?: string } | undefined>
+  } | undefined
   /** The current process (for launcher resolution); tests substitute a fixture. */
   processRef?: { execPath: string; argv: readonly string[] }
 }
@@ -201,7 +203,19 @@ export function apply(ctx: Context): void {
   const exit = ctx.get('appExit')
   if (exit === undefined) throw new Error('eval: the launcher must provide ctx.appExit before the tree mounts')
   void runEval(ctx).then(code => {
-    if (code !== undefined) exit(code)
+    if (code !== undefined) {
+      exit(code)
+      // The launcher's bounded shutdown disposes the tree and then lets the
+      // event loop drain naturally. The launcher's post-boot HMR/config file
+      // watchers are not owned by the tree, so a finished one-shot eval can be
+      // left with the loop alive and no pending exit. Once disposal has
+      // completed (process.exitCode set), force the process exit ourselves;
+      // if disposal is still in flight, the launcher's own force-exit timeout
+      // still terminates the process.
+      setTimeout(() => {
+        if (process.exitCode !== undefined) process.exit(process.exitCode)
+      }, 1500)
+    }
   })
 }
 
