@@ -1,6 +1,6 @@
 {
   "title": "dsh-eval 独立可安装插件",
-  "status": "in_progress",
+  "status": "completed",
   "work": {
     "type": "feat",
     "mode": "standard",
