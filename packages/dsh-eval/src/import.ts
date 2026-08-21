@@ -1,19 +1,25 @@
 /**
- * Cross-harness trace import: Codex and Claude Code session JSONL become the
- * eval trace vocabulary so report and compare can fold metrics over runs
- * recorded by other agents. Each importer synthesizes one turn (and one step)
- * per user message, preserving assistant text and tool calls/results; model
- * token usage is not part of either external format, so token metrics stay
- * zero.
+ * Cross-harness trace import: Codex, Claude Code, and native DSH session logs
+ * become the eval trace vocabulary so report and compare can fold metrics
+ * over runs recorded by other agents. Each external importer synthesizes one
+ * turn (and one step) per user message, preserving assistant text and tool
+ * calls/results; model token usage is not part of either external format, so
+ * token metrics stay zero. The native `dsh` importer instead parses a real
+ * DSH session log (plain JSONL, or the `.zstd` container the persistence
+ * backend writes), so it carries real events, tool calls, and token metrics.
  *
  * @module dsh-eval/import
  */
 
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
+import { zstdDecompressSync } from 'node:zlib'
 import { computeMetrics } from './metrics.ts'
 import { parseSessionLog } from './trace.ts'
 import type { EvalRun, EvalTrace } from './types.ts'
+
+/** Zstandard frame magic, per RFC 8878. */
+const ZSTD_MAGIC = 0xFD2FB528
 
 /** Synthetic event-time spacing keeps imported metrics deterministic. */
 const STEP_MS = 1000
@@ -288,7 +294,142 @@ export function importClaudeLog(text: string, source: string): EvalTrace {
 }
 
 /** Import formats the CLI accepts. */
-export type ImportFormat = 'codex' | 'claude-code'
+export type ImportFormat = 'codex' | 'claude-code' | 'dsh'
+
+/**
+ * Byte range occupied by one structurally complete Zstandard frame. The scan
+ * walks the frame header and block headers per RFC 8878 without
+ * decompressing block payloads, so it can split the persistence backend's
+ * concatenated-frame container into independently decodable frames.
+ */
+export interface ZstdFrameRange {
+  /** Inclusive frame start. */
+  start: number
+  /** Exclusive frame end. */
+  end: number
+}
+
+/** Structural scan result for a concatenated Zstandard stream. */
+export interface ZstdFrameScan {
+  /** Complete frames in file order. */
+  frames: ZstdFrameRange[]
+  /** Start of an incomplete final frame, when EOF interrupts one. */
+  tornStart?: number
+}
+
+/**
+ * Locate complete zstd frames without decompressing their blocks. Invalid
+ * complete structure rejects; EOF inside the final frame returns its start
+ * for the caller to report.
+ * @param buffer - the session artifact bytes.
+ * @returns complete frame ranges and an optional incomplete-final-frame start.
+ */
+export function scanZstdFrames(buffer: Buffer, maxFrames = Number.POSITIVE_INFINITY): ZstdFrameScan {
+  const frames: ZstdFrameRange[] = []
+  let offset = 0
+
+  while (offset < buffer.length) {
+    const start = offset
+    if (buffer.length - offset < 4) return { frames, tornStart: start }
+    if (buffer.readUInt32LE(offset) !== ZSTD_MAGIC) {
+      throw new Error(`corrupt Zstandard session log: invalid frame magic at byte ${offset}`)
+    }
+    offset += 4
+
+    if (offset === buffer.length) return { frames, tornStart: start }
+    const descriptor = buffer.readUInt8(offset)
+    offset += 1
+    if ((descriptor & 0x18) !== 0) {
+      throw new Error(`corrupt Zstandard session log: reserved frame-header bit at byte ${offset - 1}`)
+    }
+
+    const contentSizeFlag = descriptor >>> 6
+    const singleSegment = (descriptor & 0x20) !== 0
+    const checksum = (descriptor & 0x04) !== 0
+    const dictionaryFlag = descriptor & 0x03
+    const dictionaryBytes = dictionaryFlag === 3 ? 4 : dictionaryFlag
+    const contentSizeBytes = contentSizeFlag === 0
+      ? (singleSegment ? 1 : 0)
+      : 1 << contentSizeFlag
+    const remainingHeaderBytes = (singleSegment ? 0 : 1) + dictionaryBytes + contentSizeBytes
+    if (buffer.length - offset < remainingHeaderBytes) return { frames, tornStart: start }
+    offset += remainingHeaderBytes
+
+    for (;;) {
+      if (buffer.length - offset < 3) return { frames, tornStart: start }
+      const blockHeader = buffer.readUIntLE(offset, 3)
+      offset += 3
+      const lastBlock = (blockHeader & 1) !== 0
+      const blockType = (blockHeader >>> 1) & 0x03
+      const blockSize = blockHeader >>> 3
+      if (blockType === 0x03) {
+        throw new Error(`corrupt Zstandard session log: reserved block type at byte ${offset - 3}`)
+      }
+      const payloadBytes = blockType === 0x01 ? 1 : blockSize
+      if (buffer.length - offset < payloadBytes) return { frames, tornStart: start }
+      offset += payloadBytes
+      if (lastBlock) break
+    }
+
+    if (checksum) {
+      if (buffer.length - offset < 4) return { frames, tornStart: start }
+      offset += 4
+    }
+    frames.push({ start, end: offset })
+    if (frames.length === maxFrames) return { frames }
+  }
+
+  return { frames }
+}
+
+/**
+ * Decode a DSH `.zstd` session container: a concatenated sequence of
+ * checksummed zstd frames (a header frame followed by event-batch frames).
+ * @param buffer - the container bytes.
+ * @returns the plain JSONL text of the whole session.
+ * @throws when the container is empty, ends mid-frame, or a frame fails.
+ */
+export function decodeZstdSession(buffer: Buffer): string {
+  const { frames, tornStart } = scanZstdFrames(buffer)
+  if (frames.length === 0) throw new Error('empty or header-less Zstandard session log')
+  if (tornStart !== undefined) {
+    throw new Error(`corrupt Zstandard session log: incomplete final frame at byte ${tornStart}`)
+  }
+  const parts = frames.map(frame => zstdDecompressSync(buffer.subarray(frame.start, frame.end)))
+  return Buffer.concat(parts).toString('utf8')
+}
+
+/**
+ * Load a native DSH session log (plain JSONL or the `.zstd` container) as a
+ * trace. The persisted event stream is already in the eval trace vocabulary,
+ * so no synthesis is needed: packed chunk rows and the seq contract are
+ * handled by the shared session parser.
+ * @param text - the session's plain JSONL text.
+ * @returns the parsed trace.
+ */
+export function importDshLog(text: string): EvalTrace {
+  return parseSessionLog(text)
+}
+
+/**
+ * Best-effort model detection from a native trace: the first request header's
+ * configured model. The header payload appears both directly
+ * (`data.config.model`) and nested under a request envelope
+ * (`data.header.config.model`), depending on the recording path. Imported
+ * runs otherwise cannot name the model that produced the session, so reports
+ * would show a placeholder.
+ * @param trace - the parsed native trace.
+ * @returns the configured model, or undefined when the log carries none.
+ */
+function modelOf(trace: EvalTrace): string | undefined {
+  for (const event of trace.events) {
+    if (event.type !== 'request/header') continue
+    const data = event.data as { config?: { model?: unknown }; header?: { config?: { model?: unknown } } } | undefined
+    const config = data?.config ?? data?.header?.config
+    if (typeof config?.model === 'string' && config.model !== '') return config.model
+  }
+  return undefined
+}
 
 /**
  * Load an external session log and build a one-trial run record from it.
@@ -299,6 +440,34 @@ export type ImportFormat = 'codex' | 'claude-code'
  */
 export async function importTraceFile(format: ImportFormat, path: string, caseId: string): Promise<EvalRun> {
   const absolute = resolve(path)
+  if (format === 'dsh') {
+    const buffer = await readFile(absolute)
+    const text = buffer.length >= 4 && buffer.readUInt32LE(0) === ZSTD_MAGIC
+      ? decodeZstdSession(buffer)
+      : buffer.toString('utf8')
+    const trace = importDshLog(text)
+    const metrics = computeMetrics(trace.events, undefined)
+    return {
+      benchmark: 'import:dsh',
+      model: modelOf(trace) ?? 'imported',
+      createdAt: Date.now(),
+      trials: 1,
+      seed: 0,
+      pricing: null,
+      tempRoot: dirname(absolute),
+      cases: [{
+        caseId,
+        trial: 1,
+        status: 'completed',
+        tracePath: absolute,
+        exitCode: null,
+        timedOut: false,
+        metrics,
+      }],
+      aggregate: metrics,
+      grading: null,
+    }
+  }
   const text = await readFile(absolute, 'utf8')
   const trace = format === 'codex'
     ? importCodexLog(text, absolute)

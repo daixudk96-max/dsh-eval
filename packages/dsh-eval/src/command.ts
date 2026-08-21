@@ -107,13 +107,13 @@ export function evalCommand(publish: (values: EvalStartupValues) => void): Comma
     })
   const importer = program.command('import').description('import an external harness session log as a run report')
   importer
-    .argument('<format>', 'external harness format: codex or claude-code')
-    .argument('<session.jsonl>', 'path to the external session log')
+    .argument('<format>', 'session format: codex, claude-code, or dsh (native session.jsonl or .zstd)')
+    .argument('<session.jsonl>', 'path to the session log (plain JSONL or .zstd for dsh)')
     .option('--out <path>', 'output run JSON path', 'imported-run.json')
     .option('--case-id <id>', 'case id for the imported trial', 'imported')
     .action((format: string, path: string, options: ImportCommandOptions) => {
-      if (format !== 'codex' && format !== 'claude-code') {
-        program.error('error: import format must be codex or claude-code')
+      if (format !== 'codex' && format !== 'claude-code' && format !== 'dsh') {
+        program.error('error: import format must be codex, claude-code, or dsh')
         return
       }
       publish({ kind: 'import', format, path, outPath: options.out, caseId: options.caseId })

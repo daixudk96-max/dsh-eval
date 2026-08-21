@@ -174,7 +174,26 @@ describe('dsh-eval command composition', () => {
   it('rejects an unknown import format', async () => {
     const observed = await bootEval(['import', 'bogus', 'x.jsonl'])
     expect(observed.exits).toEqual([1])
-    expect(observed.err).toContain('import format must be codex or claude-code')
+    expect(observed.err).toContain('import format must be codex, claude-code, or dsh')
+  })
+
+  it('accepts the native dsh import format', async () => {
+    const dir = tempDir()
+    const path = join(dir, 'session.jsonl')
+    writeFileSync(path, [
+      '{"type":"session","version":0,"id":"dsh-cli-import","createdAt":1700000000000}',
+      '{"type":"turn/start","seq":0,"time":1,"data":{"turn":1}}',
+      '{"type":"user/message","seq":1,"time":2,"data":{"id":"u1","role":"user","content":[{"type":"text","text":"hi"}],"source":{"kind":"user"}}}',
+      '{"type":"step/start","seq":2,"time":3,"data":{"turn":1,"step":0}}',
+      '{"type":"step/end","seq":3,"time":4,"data":{"turn":1,"step":0}}',
+      '{"type":"turn/end","seq":4,"time":5,"data":{"turn":1,"reason":{"kind":"completed"}}}',
+      '',
+    ].join('\n'))
+    const outPath = join(dir, 'dsh-imported-run.json')
+    const observed = await bootEval(['import', 'dsh', path, '--out', outPath])
+    expect(observed.exits).toEqual([0])
+    expect(observed.out).toContain('Wrote')
+    expect(existsSync(outPath)).toBe(true)
   })
 
   it('renders a persisted run with the report subcommand', async () => {

@@ -133,12 +133,19 @@ runs require a source-mode harness checkout.
 
 ## Importing external traces
 
-`dsh eval import codex|claude-code <session.jsonl> --out run.json` imports a
-Codex or Claude Code session log as a one-trial run with folded metrics:
+`dsh eval import codex|claude-code|dsh <session.jsonl> --out run.json` imports a
+session log as a one-trial run with folded metrics:
 
-- one synthesized turn (and step) per user message;
-- assistant text, tool calls, and tool results mapped into the trace vocabulary;
-- token usage is not part of either external format, so token and cost metrics stay zero.
+- `codex` / `claude-code` — one synthesized turn (and step) per user message;
+  assistant text, tool calls, and tool results mapped into the trace
+  vocabulary; token usage is not part of either external format, so token and
+  cost metrics stay zero.
+- `dsh` — a **native DSH session log**: the plain `session.jsonl` a headless
+  trial writes, or the `.zstd` container the persistence backend writes for
+  GUI sessions (found under `<dsh-home>/sessions/<cwd-bucket>/<session-id>/`).
+  Native logs already speak the eval trace vocabulary, so events, tool calls,
+  and token metrics are real, and the configured model is read from the
+  first request header when present.
 
 The imported run drops into the same `report`/`compare` pipeline.
 
@@ -159,7 +166,7 @@ None; this package neither assembles nor sends a provider request, so no request
 - **Judge output is best-effort** — a judge chat failure or unparsable reply yields null verdict fields, and judge calls consume model quota outside the trial's measured cost.
 - **Paired comparison pairs as-is** — trials pair by case id and trial index; `seed` is recorded provenance, not a deterministic guarantee of identical model output, and per-arm leaderboards are not rendered.
 - **Replay binds by first-call order** — the replay plugin keys recorded scripts to live sessions by first-call order, so concurrent subagents replay non-deterministically.
-- **Imported traces lack token usage** — Codex and Claude Code logs do not record provider usage, so imported runs report zero tokens and no cost.
+- **Imported traces lack token usage** — Codex and Claude Code logs do not record provider usage, so those imports report zero tokens and no cost (native `dsh` imports keep real usage).
 - **Direct-child timeout only** — a timed-out trial kills the direct dsh process; on Windows its descendants may survive.
 - **Windows launcher commands** — the spawned command runs without a shell, so `.cmd`/`.bat` shims need a direct executable or `node <path>` override (`--dsh "node C:/.../apps/cli/lib/bin.js"`).
 - **No atomic report write** — the run JSON is written in place; a crash mid-write can truncate the report.
