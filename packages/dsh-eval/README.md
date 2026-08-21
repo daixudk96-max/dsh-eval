@@ -58,6 +58,7 @@ pricing:
 | `name` | required | Benchmark name, also the run record's `benchmark` field. |
 | `model` | required | Model id for the child `agent-default-model` and pricing lookup. |
 | `provider` | parent default | Optional provider route; defaults to the parent's default-model provider. |
+| `reasoningEffort` | parent default | Optional adapter-owned reasoning effort (e.g. `max`) written into the child `agent-default-model`; defaults to the parent's selection. |
 | `profile` | `headless` | dsh profile each trial spawns. |
 | `command` | current DSH CLI | dsh launcher argv (omitted = current `[process.execPath, argv[1]]` default). |
 | `trials` | `1` | Trials per case. |

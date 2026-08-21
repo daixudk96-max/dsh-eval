@@ -70,7 +70,7 @@ export interface ProviderSettingsSubtree {
 /** The child settings document (plain object written to settings.yaml). */
 export interface ChildSettings {
   [key: string]: unknown
-  'agent-default-model'?: { provider: string; model: string }
+  'agent-default-model'?: { provider: string; model: string; reasoningEffort?: string }
 }
 
 /**
@@ -176,7 +176,11 @@ export function buildChildSettings(
   subtree: ProviderSettingsSubtree,
 ): ChildSettings {
   const child: ChildSettings = {
-    'agent-default-model': { provider: selection.provider, model: selection.model },
+    'agent-default-model': {
+      provider: selection.provider,
+      model: selection.model,
+      ...(selection.reasoningEffort !== undefined ? { reasoningEffort: selection.reasoningEffort } : {}),
+    },
   }
   if (subtree.bridgeable) {
     let target = child

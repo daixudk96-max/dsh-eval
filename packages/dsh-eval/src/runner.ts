@@ -39,8 +39,8 @@ export interface RunOptions {
   tempRoot?: string
   /** LLM-judge chat seam; required when the benchmark configures a judge. */
   judgeChat?: JudgeChat
-  /** Effective provider/model written into each child's minimal settings.yaml. */
-  selection?: { provider: string; model: string }
+  /** Effective provider/model/reasoning written into each child's minimal settings.yaml. */
+  selection?: { provider: string; model: string; reasoningEffort?: string }
   /** Extra child settings subtrees (e.g. the selected provider's config). */
   childSettings?: Record<string, unknown>
   /** Resolve the credential value afresh before each trial spawn. */
@@ -298,7 +298,13 @@ async function runCaseTrial(
   // Write the minimal child settings (agent-default-model + provider subtree).
   if (options.selection !== undefined) {
     const child = {
-      'agent-default-model': { provider: options.selection.provider, model: options.selection.model },
+      'agent-default-model': {
+        provider: options.selection.provider,
+        model: options.selection.model,
+        ...(options.selection.reasoningEffort !== undefined
+          ? { reasoningEffort: options.selection.reasoningEffort }
+          : {}),
+      },
       ...(options.childSettings ?? {}),
     }
     await writeFile(join(dshHome, 'settings.yaml'), `${serializeYaml(child)}\n`, 'utf8')
@@ -437,6 +443,9 @@ export async function runBenchmark(benchmark: Benchmark, options: RunOptions = {
     benchmark: benchmark.name,
     model: benchmark.model,
     ...(options.selection !== undefined ? { provider: options.selection.provider } : {}),
+    ...(options.selection?.reasoningEffort !== undefined
+      ? { reasoningEffort: options.selection.reasoningEffort }
+      : {}),
     createdAt: Date.now(),
     trials,
     seed: benchmark.seed,

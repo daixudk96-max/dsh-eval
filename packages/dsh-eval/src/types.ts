@@ -70,6 +70,8 @@ export interface Benchmark {
   model: string
   /** Optional provider route; defaults to the parent's default-model provider. */
   provider?: string
+  /** Optional adapter-owned reasoning effort; defaults to the parent's selection. */
+  reasoningEffort?: string
   /** dsh profile spawned per trial; defaults to `headless`. */
   profile: string
   /** Command that launches dsh, as argv. */
@@ -218,6 +220,8 @@ export interface EvalRun {
   model: string
   /** Actual provider route used, persisted per run. */
   provider?: string
+  /** Adapter-owned reasoning effort used, persisted per run when set. */
+  reasoningEffort?: string
   /** Run creation time, epoch milliseconds. */
   createdAt: number
   /** Trials per case actually executed. */

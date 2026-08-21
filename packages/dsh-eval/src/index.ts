@@ -77,7 +77,7 @@ function summary(run: Awaited<ReturnType<typeof runBenchmark>>): string {
 export interface EvalServices {
   judgeChat?: JudgeChat | undefined
   /** rc.8 `agentDefaultModel` service for default provider selection. */
-  agentDefaultModel?: { currentSelection(): { provider: string; model: string } } | undefined
+  agentDefaultModel?: { currentSelection(): { provider: string; model: string; reasoningEffort?: string } } | undefined
   /** rc.8 `llm` service for provider live/configurable checks. */
   llm?: {
     listProviders(): readonly (string | { id: string })[]
@@ -134,7 +134,7 @@ export async function executeEval(
       trials?: number
       profile?: string
       judgeChat?: JudgeChat
-      selection?: { provider: string; model: string }
+      selection?: { provider: string; model: string; reasoningEffort?: string }
       childSettings?: Record<string, unknown>
       credentialRef?: string
       resolveCredential?: () => Promise<string | undefined>

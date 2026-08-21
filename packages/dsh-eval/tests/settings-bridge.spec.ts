@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractProviderSubtree, findConfigurable, providerIdOf } from '../src/settings-bridge.ts'
+import { buildChildSettings, extractProviderSubtree, findConfigurable, providerIdOf } from '../src/settings-bridge.ts'
 import type { ConfigurableProvider } from '../src/settings-bridge.ts'
 
 describe('dsh-eval settings-bridge provider discovery', () => {
@@ -102,5 +102,21 @@ describe('dsh-eval settings-bridge provider discovery', () => {
     )
     expect(subtree.bridgeable).toBe(false)
     expect(subtree.reason).toContain('raw headers')
+  })
+
+  it('buildChildSettings writes reasoningEffort into agent-default-model when selected', () => {
+    const child = buildChildSettings(
+      { provider: 'clipa', model: 'gpt-5.6-sol', reasoningEffort: 'max' },
+      { settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'clipa'], value: {}, bridgeable: true },
+    )
+    expect(child['agent-default-model']).toEqual({ provider: 'clipa', model: 'gpt-5.6-sol', reasoningEffort: 'max' })
+  })
+
+  it('buildChildSettings omits reasoningEffort when the selection has none', () => {
+    const child = buildChildSettings(
+      { provider: 'deepseek-official', model: 'deepseek-v4' },
+      { settingsNs: 'llm-deepseek', settingsPath: [], value: {}, bridgeable: true },
+    )
+    expect(child['agent-default-model']).toEqual({ provider: 'deepseek-official', model: 'deepseek-v4' })
   })
 })

@@ -16,27 +16,32 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Benchmark, BenchmarkJudge } from './types.ts'
 
-/** The selected provider + model for one run. */
+/** The selected provider + model (+ optional reasoning effort) for one run. */
 export interface ModelSelection {
   provider: string
   model: string
+  /** Adapter-owned reasoning effort, or provider/default behavior when absent. */
+  reasoningEffort?: string
 }
 
 /** Narrow contract of rc.8 `agentDefaultModel` (public service, read-only). */
 interface AgentDefaultModel {
-  currentSelection(): { provider: string; model: string }
+  currentSelection(): { provider: string; model: string; reasoningEffort?: string }
 }
 
-/** Resolve the effective provider/model for a run. */
+/** Resolve the effective provider/model/reasoning for a run. */
 export function resolveModelSelection(
-  benchmark: Pick<Benchmark, 'model' | 'provider'>,
+  benchmark: Pick<Benchmark, 'model' | 'provider' | 'reasoningEffort'>,
   agentDefaultModel: AgentDefaultModel,
 ): ModelSelection {
   const parent = agentDefaultModel.currentSelection()
-  return {
+  const selection: ModelSelection = {
     provider: benchmark.provider ?? parent.provider,
     model: benchmark.model,
   }
+  const reasoningEffort = benchmark.reasoningEffort ?? parent.reasoningEffort
+  if (reasoningEffort !== undefined) selection.reasoningEffort = reasoningEffort
+  return selection
 }
 
 /**
