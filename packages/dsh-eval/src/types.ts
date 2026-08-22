@@ -48,6 +48,10 @@ export interface BenchmarkJudge {
   model: string
   /** Optional task rubric appended to the default judging instructions. */
   rubric?: string
+  /** Rubric input in benchmark YAML: plaintext (kept on the document). */
+  rubricText?: string
+  /** Rubric input in benchmark YAML: AES-256-GCM `v1:` envelope; decrypted at load time into `rubric`. */
+  rubricCipher?: string
   /** Maximum final-answer score; defaults to 10. */
   maxScore: number
 }

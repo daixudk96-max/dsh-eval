@@ -18,7 +18,7 @@ ledger/ledger.jsonl             append-only WAL
 
 ## API
 
-- `resolveCurrent(logicalId)` → `{ logicalId, revisionId, digest, resolved }`
+- `resolveCurrent(logicalId)` → `{ logicalId, revisionId, digest, gateRunId, approvalId, resolved }`（`gateRunId`/`approvalId` 为提升该版本的 gate run 与用户确认绑定）
 - `createCandidate(logicalId, { sourceRevisionId, evolutionRunId })` → `candidateId`
 - `patchCandidate(candidateId, mutation)` — 仅 DRAFT 可写
 - `sealRevision(candidateId)` → `{ revisionId, digest }` — 内容寻址 + 不可变

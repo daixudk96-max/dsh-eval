@@ -1,6 +1,10 @@
 name: fix-multiply-short
 # Model id must exist in the effective provider's settings (clipa serves
 # 'deepseek-v4-flash' without the ':0731' suffix; that suffix is ollama's id).
+# provider pinned to clipa: the parent default route is ollama (cloud), whose
+# model id is 'deepseek-v4-flash:0731' — inheriting it with this model id
+# mismatched and every run produced 0 tokens (fixed 2026-08-22).
+provider: clipa
 model: deepseek-v4-flash
 profile: headless
 trials: 1

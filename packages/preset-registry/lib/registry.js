@@ -78,13 +78,17 @@ class Registry {
 
   // ---- public API ---------------------------------------------------------
 
-  /** Resolve the current revision of a logical preset. */
+  /** Resolve the current revision of a logical preset (incl. the gate run and approval that promoted it). */
   async resolveCurrent(logicalId) {
     await this._ensure();
     const pointer = await readJson(this._pointerFile(logicalId), null);
     if (!pointer || !pointer.revisionId) return null;
     const resolved = this.agentPresets ? await this.agentPresets.resolve(pointer.revisionId) : null;
-    return { logicalId, revisionId: pointer.revisionId, digest: pointer.digest, resolved };
+    return {
+      logicalId, revisionId: pointer.revisionId, digest: pointer.digest,
+      gateRunId: pointer.gateRunId || null, approvalId: pointer.approvalId || null,
+      resolved,
+    };
   }
 
   /** Create a DRAFT candidate staged from a source revision. */

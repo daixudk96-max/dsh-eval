@@ -1,0 +1,39 @@
+name: evaluate-preset-self
+# 评测对象 = evaluate agent preset 本身。
+# 任务: 评测 agent 用 eval CLI import 一个真实 session 并产出报告。
+# 被测 preset 由 wrapper 决定: 它把 PRESET_SRC 的 agent.cordis.yml 行合并进
+# runner 的 eval overlay(headless 不 mount agent preset, 行进全局层即可生效);
+# 用 PRESET_SRC 指向 evaluate(v1) 或 evaluate-evolved(v2) 即可对比两代。
+# provider 固定 clipa(本地 8317, 与 deepseek-v4-flash 匹配; 继承 ollama 云路由会 0 tokens)。
+provider: clipa
+model: deepseek-v4-flash
+profile: headless
+# command override: wrapper installs the eval profile bundle, rebuilds the
+# child settings.yaml (provider subtree + agent-default-model) and injects
+# the provider API key, then merges the user `evaluate` preset rows into the
+# child's overlay before exec'ing dsh. --provider/--model/--reasoning-effort
+# are wrapper-owned argv (stripped before forwarding).
+command:
+  - node
+  - E:\github\dsh-eval\eval\benchmarks\evaluate-preset\wrapper.cjs
+  - --provider
+  - clipa
+  - --model
+  - deepseek-v4-flash
+  - --reasoning-effort
+  - max
+trials: 1
+timeoutMs: 300000
+seed: 42
+cases:
+  - id: eval-real-session
+    prompt: |
+      Evaluate the DSH session at ./sample-session.jsonl.zstd using the eval
+      profile CLI. Import it into a report JSON, then render the report and
+      write a markdown summary to REPORT.md. The REPORT.md must contain a
+      metrics table (steps, tool calls, tool success, tokens) and a short
+      Chinese conclusion. Do not modify the session file.
+    workspace: E:\github\dsh-eval\eval\benchmarks\evaluate-preset
+    expected:
+      tool: read
+      check: node check.js

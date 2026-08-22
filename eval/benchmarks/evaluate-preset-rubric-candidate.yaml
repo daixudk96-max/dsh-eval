@@ -1,0 +1,42 @@
+name: evaluate-preset-rubric-candidate
+provider: clipa
+model: deepseek-v4-flash
+profile: headless
+command:
+  - node
+  - E:\github\dsh-eval\eval\benchmarks\evaluate-preset\wrapper.cjs
+  - --preset-src
+  - E:\github\dsh-eval\eval\benchmarks\evaluate-preset\preset-v5-mutated
+  - --provider
+  - clipa
+  - --model
+  - deepseek-v4-flash
+  - --reasoning-effort
+  - max
+trials: 1
+timeoutMs: 300000
+seed: 42
+judge:
+  provider: clipa
+  model: deepseek-v4-flash
+  maxScore: 10
+  rubricText: |
+    Score the agent's REPORT.md deliverable on a 0-10 scale per dimension:
+    (1) completeness: metrics table with steps, tool calls, tool success rate,
+        tokens present and internally consistent;
+    (2) accuracy: numbers match the imported report JSON, no invented metrics;
+    (3) analysis: a Chinese conclusion that identifies failures or risks,
+        not just a restatement of the table.
+    Report each dimension separately in the rationale.
+cases:
+  - id: eval-real-session
+    prompt: |
+      Evaluate the DSH session at ./sample-session.jsonl.zstd using the eval
+      profile CLI. Import it into a report JSON, then render the report and
+      write a markdown summary to REPORT.md. The REPORT.md must contain a
+      metrics table (steps, tool calls, tool success, tokens) and a short
+      Chinese conclusion. Do not modify the session file.
+    workspace: E:\github\dsh-eval\eval\benchmarks\evaluate-preset
+    expected:
+      tool: read
+      check: node check.js

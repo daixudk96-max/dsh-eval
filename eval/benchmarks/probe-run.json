@@ -1,0 +1,21 @@
+{
+  "benchmark": "probe-credential-injection",
+  "model": "deepseek-v4-flash:0731",
+  "createdAt": 1787328987729,
+  "trials": 1,
+  "seed": 42,
+  "pricing": null,
+  "tempRoot": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-Ki8yqk",
+  "cases": [
+    {
+      "caseId": "probe-1",
+      "trial": 1,
+      "status": "error",
+      "error": "no session log found; dsh exited with code 0",
+      "exitCode": 0,
+      "timedOut": false
+    }
+  ],
+  "aggregate": null,
+  "grading": null
+}

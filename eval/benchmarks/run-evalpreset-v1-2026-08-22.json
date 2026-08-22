@@ -1,0 +1,21 @@
+{
+  "benchmark": "evaluate-preset-self",
+  "model": "deepseek-v4-flash",
+  "createdAt": 1787390769058,
+  "trials": 1,
+  "seed": 42,
+  "pricing": null,
+  "tempRoot": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-NPzNek",
+  "cases": [
+    {
+      "caseId": "eval-real-session",
+      "trial": 1,
+      "status": "error",
+      "error": "no session log found; dsh exited with code 1: wrapper: installed preset evaluate -> C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-NPzNek\\eval-real-session-1\\dsh-home\\.agent-presets\\evaluate\nfile:///E:/github/dsh/packages/boot/app-boot/lib/index.js:543\r\n\t\tif (template === void 0) throw new Error(`${binName}: profile ${JSON.stringify(name)} does not exist; create it with 'dsh plugin --profile ${name} add <package>'`);\r\n\t\t                               ^\r\n\r\nError: dsh: profile \"evaluate\" does not exist; create it with 'dsh plugin --profile evaluate add <package>'\r\n    at loadProfile (file:///E:/github/dsh/packages/boot/app-boot/lib/index.js:543:34)\r\n    at prepareProfile (file:///E:/github/dsh/apps/cli/lib/profile-boot-DG5t9aNs.js:142:18)\r\n    at composeProfile (file:///E:/github/dsh/apps/cli/lib/profile-boot-DG5t9aNs.js:167:18)\r\n    at runProfile (file:///E:/github/dsh/apps/cli/lib/profile-boot-DG5t9aNs.js:221:19)\r\n    at file:///E:/github/dsh/apps/cli/lib/bin.js:133:9\r\n\r\nNode.js v24.4.1\r\n",
+      "exitCode": 1,
+      "timedOut": false
+    }
+  ],
+  "aggregate": null,
+  "grading": null
+}

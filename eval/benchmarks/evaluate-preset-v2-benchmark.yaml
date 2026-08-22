@@ -1,0 +1,33 @@
+name: evaluate-preset-v2-self
+# 评测对象 = evaluate-evolved agent preset(v2, 已 promote 的进化产物)。
+# 与 evaluate-preset-benchmark.yaml 完全同构, 仅 --preset-src 指向
+# eval/presets/evaluate-evolved/。用于对比 v1 vs v2 的真实模型评测。
+provider: clipa
+model: deepseek-v4-flash
+profile: headless
+command:
+  - node
+  - E:\github\dsh-eval\eval\benchmarks\evaluate-preset\wrapper.cjs
+  - --preset-src
+  - E:\github\dsh-eval\eval\presets\evaluate-evolved
+  - --provider
+  - clipa
+  - --model
+  - deepseek-v4-flash
+  - --reasoning-effort
+  - max
+trials: 1
+timeoutMs: 300000
+seed: 42
+cases:
+  - id: eval-real-session
+    prompt: |
+      Evaluate the DSH session at ./sample-session.jsonl.zstd using the eval
+      profile CLI. Import it into a report JSON, then render the report and
+      write a markdown summary to REPORT.md. The REPORT.md must contain a
+      metrics table (steps, tool calls, tool success, tokens) and a short
+      Chinese conclusion. Do not modify the session file.
+    workspace: E:\github\dsh-eval\eval\benchmarks\evaluate-preset
+    expected:
+      tool: read
+      check: node check.js

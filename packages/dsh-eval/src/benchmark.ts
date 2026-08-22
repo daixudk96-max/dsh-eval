@@ -1,7 +1,10 @@
 /**
  * Benchmark document loading and validation for dsh-eval. YAML parses with
  * js-yaml's safe loader; zod validates the parsed shape; prompt files and
- * workspaces resolve against the benchmark file's directory.
+ * workspaces resolve against the benchmark file's directory. A judge rubric
+ * may be plaintext (`judge.rubricText`) or an AES-256-GCM `v1:` envelope
+ * (`judge.rubricCipher`, see lib/rubric) — the envelope is decrypted here at
+ * load time, so the rest of the pipeline only ever sees plaintext.
  *
  * @module dsh-eval/benchmark
  */
@@ -10,14 +13,20 @@ import { readFile } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import { load } from 'js-yaml'
 import { z } from 'zod'
+import { decryptRubric, resolveRubricKey, type RubricKeyOptions } from './rubric.ts'
 import type { Benchmark, BenchmarkCase } from './types.ts'
 
 const judgeSchema = z.object({
   provider: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   rubric: z.string().min(1).optional(),
+  rubricText: z.string().min(1).optional(),
+  rubricCipher: z.string().min(1).optional(),
   maxScore: z.number().int().positive().default(10),
-}).strict()
+}).strict().refine(
+  judge => [judge.rubric, judge.rubricText, judge.rubricCipher].filter(v => v !== undefined).length <= 1,
+  { message: 'judge accepts at most one of rubric, rubricText, rubricCipher' },
+)
 
 const replaySchema = z.object({
   dir: z.string().min(1),
@@ -98,9 +107,10 @@ async function resolveCase(
  * Parse benchmark YAML text into a validated runtime document.
  * @param text - the benchmark document's YAML source.
  * @param baseDir - absolute directory used to resolve prompt and workspace paths.
- * @returns the validated benchmark.
+ * @param opts - optional rubric key resolution overrides (see RubricKeyOptions).
+ * @returns the validated benchmark; an encrypted judge rubric is decrypted to plaintext.
  */
-export async function parseBenchmark(text: string, baseDir: string): Promise<Benchmark> {
+export async function parseBenchmark(text: string, baseDir: string, opts: RubricKeyOptions = {}): Promise<Benchmark> {
   const value = load(text)
   if (typeof value !== 'object' || value === null) {
     throw new Error('benchmark document must be a YAML mapping')
@@ -111,7 +121,17 @@ export async function parseBenchmark(text: string, baseDir: string): Promise<Ben
     cases.push(await resolveCase(caseValue, baseDir))
   }
   const pricing = parsed.pricing
-  const judge = parsed.judge
+  let judge = parsed.judge
+  if (judge !== undefined && judge.rubricCipher !== undefined) {
+    const key = resolveRubricKey(baseDir, opts)
+    const rubric = decryptRubric(judge.rubricCipher, key)
+    const { rubricCipher: _cipher, ...rest } = judge
+    judge = { ...rest, rubric }
+  }
+  else if (judge !== undefined && judge.rubricText !== undefined && judge.rubric === undefined) {
+    const { rubricText: _text, ...rest } = judge
+    judge = { ...rest, rubric: judge.rubricText }
+  }
   const replay = parsed.replay
   return {
     name: parsed.name,
@@ -126,7 +146,7 @@ export async function parseBenchmark(text: string, baseDir: string): Promise<Ben
     cases,
     ...(pricing !== undefined ? { pricing } : {}),
     ...(judge !== undefined
-      ? { judge: { provider: judge.provider ?? '', model: judge.model ?? parsed.model, ...(judge.rubric !== undefined ? { rubric: judge.rubric } : {}), maxScore: judge.maxScore } }
+      ? { judge: { provider: judge.provider ?? '', model: judge.model ?? parsed.model, ...(judge.rubric !== undefined ? { rubric: judge.rubric } : {}), ...(judge.rubricText !== undefined ? { rubricText: judge.rubricText } : {}), maxScore: judge.maxScore } }
       : {}),
     ...(replay !== undefined
       ? { replay: { dir: isAbsolute(replay.dir) ? replay.dir : resolve(baseDir, replay.dir) } }
@@ -138,9 +158,10 @@ export async function parseBenchmark(text: string, baseDir: string): Promise<Ben
 /**
  * Load and validate a benchmark document from disk.
  * @param path - path to the benchmark YAML file.
+ * @param opts - optional rubric key resolution overrides (see RubricKeyOptions).
  * @returns the validated benchmark.
  */
-export async function loadBenchmark(path: string): Promise<Benchmark> {
+export async function loadBenchmark(path: string, opts: RubricKeyOptions = {}): Promise<Benchmark> {
   const absolute = resolve(path)
-  return parseBenchmark(await readFile(absolute, 'utf8'), dirname(absolute))
+  return parseBenchmark(await readFile(absolute, 'utf8'), dirname(absolute), opts)
 }

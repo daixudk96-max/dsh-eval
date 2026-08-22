@@ -1,0 +1,3 @@
+name: 评测
+description: 评测 DSH 会话与基准：默认把已有的 session 导入成评测报告，也可运行 benchmark 生成新评测。
+order: 2

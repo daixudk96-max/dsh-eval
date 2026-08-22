@@ -1,0 +1,66 @@
+{
+  "benchmark": "import:dsh",
+  "model": "deepseek-v4-flash:0731",
+  "createdAt": 1787391450496,
+  "trials": 1,
+  "seed": 0,
+  "pricing": null,
+  "tempRoot": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-S9NjfW\\eval-real-session-1\\workspace",
+  "cases": [
+    {
+      "caseId": "sample-session",
+      "trial": 1,
+      "status": "completed",
+      "tracePath": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-S9NjfW\\eval-real-session-1\\workspace\\sample-session.jsonl.zstd",
+      "exitCode": null,
+      "timedOut": false,
+      "metrics": {
+        "turns": 16,
+        "steps": 107,
+        "toolCalls": 126,
+        "toolResults": 124,
+        "toolSuccess": 120,
+        "toolSuccessRate": 0.967741935483871,
+        "invalidToolCalls": 4,
+        "retries": 0,
+        "tokens": {
+          "inputTokens": 8037070,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "outputTokens": 141211
+        },
+        "totalTokens": 8178281,
+        "contextTokens": 8037070,
+        "llmMs": 1589350,
+        "toolMs": 334576,
+        "ttftMs": 1008057,
+        "latencyMs": 57921060,
+        "costUsd": null
+      }
+    }
+  ],
+  "aggregate": {
+    "turns": 16,
+    "steps": 107,
+    "toolCalls": 126,
+    "toolResults": 124,
+    "toolSuccess": 120,
+    "toolSuccessRate": 0.967741935483871,
+    "invalidToolCalls": 4,
+    "retries": 0,
+    "tokens": {
+      "inputTokens": 8037070,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "outputTokens": 141211
+    },
+    "totalTokens": 8178281,
+    "contextTokens": 8037070,
+    "llmMs": 1589350,
+    "toolMs": 334576,
+    "ttftMs": 1008057,
+    "latencyMs": 57921060,
+    "costUsd": null
+  },
+  "grading": null
+}

@@ -1,0 +1,8 @@
+{
+  "run": "eval\\benchmarks\\run-rubric-baseline.json",
+  "score": 9,
+  "score0_100": 90,
+  "maxScore": 10,
+  "rationale": "The table is complete and token arithmetic is consistent, the numbers appear faithful to the source (only a minor ambiguity between tool-call/results/invalid counts prevents full accuracy), and the Chinese conclusion goes beyond the table by flagging invalid calls and high input-token cost as risks.",
+  "at": "2026-08-22T14:12:28.948Z"
+}

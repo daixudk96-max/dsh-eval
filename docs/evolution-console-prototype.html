@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSH 评测+进化控制台 · UI 原型 v2（conversation.view 标签页 + 六列看板）</title>
+<style>
+  :root {
+    --bg: #0e1116; --chrome: #13181f; --panel: #1a212b; --panel2: #212a36; --border: #2b3644;
+    --text: #e6edf3; --muted: #8b98a5; --accent: #4d9fff; --good: #3fb950;
+    --bad: #f85149; --warn: #d29922; --new: #a371f7;
+    --col-w: 218px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.55 "Segoe UI", "Microsoft YaHei", sans-serif; }
+  .page-head { padding: 16px 22px 12px; border-bottom: 1px solid var(--border); }
+  .page-head h1 { font-size: 19px; }
+  .page-head .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .notice { margin: 12px 22px; padding: 10px 14px; border: 1px solid #3a3355; border-radius: 8px; background: linear-gradient(135deg,#1b2431,#26203a); font-size: 12.5px; color: #c9d4e0; }
+  .notice b { color: var(--new); }
+  code { font-family: Consolas, monospace; background: #0b0f14; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+
+  /* ===== DSH Web GUI 外壳（示意） ===== */
+  .app { display: flex; height: calc(100vh - 118px); margin: 0 22px 22px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .sidebar { width: 208px; background: var(--panel); border-right: 1px solid var(--border); padding: 12px 10px; flex-shrink: 0; }
+  .sidebar .brand { font-size: 12px; color: var(--muted); letter-spacing: .5px; margin-bottom: 10px; }
+  .sidebar .brand b { color: var(--accent); }
+  .ws-item { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; margin-bottom: 4px; cursor: pointer; color: var(--muted); }
+  .ws-item.active { background: rgba(77,159,255,.12); color: var(--text); }
+  .ws-item .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 6px; }
+  .sidebar .hint { font-size: 10.5px; color: #5c6a79; margin-top: 12px; border-top: 1px dashed var(--border); padding-top: 8px; }
+
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  /* 会话头部 + 视图标签环（conversation.session.header / conversation.view） */
+  .sess-head { display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap; }
+  .sess-title { font-size: 13px; color: var(--muted); }
+  .sess-title b { color: var(--text); }
+  .view-tabs { display: flex; gap: 4px; }
+  .view-tab { font-size: 12.5px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); cursor: pointer; background: transparent; }
+  .view-tab.active { background: rgba(77,159,255,.15); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .view-tab .new-tag { background: var(--new); color: #fff; font-size: 9.5px; border-radius: 8px; padding: 0 5px; margin-left: 5px; vertical-align: 1px; }
+  .view-tab.chat::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 6px; }
+  .slot-note { font-size: 10.5px; color: #5c6a79; margin-left: auto; }
+
+  /* 视图内容 */
+  .view-body { flex: 1; overflow: auto; }
+  .chat-placeholder { padding: 26px; color: var(--muted); font-size: 13px; }
+  .chat-line { padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); max-width: 640px; }
+  .chat-line .who { font-size: 11px; color: var(--muted); }
+
+  /* ===== 进化视图 ===== */
+  .evo { padding: 14px; }
+  /* 当前版本条（来自 GET /eval/state 的 current） */
+  .current-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; border: 1px solid rgba(63,185,80,.4); background: rgba(63,185,80,.07); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
+  .current-bar .cb-label { font-size: 11px; color: var(--muted); }
+  .current-bar .cb-rev { font-family: Consolas, monospace; font-size: 14px; color: var(--good); }
+  .current-bar .cb-score { font-size: 13px; }
+  .current-bar .cb-score .up { color: var(--good); font-weight: 700; }
+  .cb-new { font-size: 11px; color: var(--new); font-family: Consolas, monospace; }
+  .cb-badge { font-size: 10.5px; padding: 1px 8px; border-radius: 9px; background: rgba(63,185,80,.15); color: var(--good); border: 1px solid rgba(63,185,80,.4); font-weight: 600; }
+
+  /* 看板 */
+  .board-wrap { overflow-x: auto; }
+  .board { display: flex; gap: 10px; width: max-content; }
+  .col { width: var(--col-w); flex-shrink: 0; background: rgba(26,33,43,.55); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; max-height: 480px; }
+  .col-head { padding: 8px 10px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .col-head .cnt { background: var(--panel2); border-radius: 9px; padding: 0 7px; font-size: 11px; }
+  .col-head.st-sealed { color: #8ab4f8; } .col-head.st-evaluating { color: #ffd479; }
+  .col-head.st-accepted { color: #7bd88f; } .col-head.st-promoted { color: var(--good); }
+  .col-head.st-rejected { color: var(--bad); } .col-head.st-inconclusive { color: var(--warn); }
+  .col-body { padding: 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .card { background: var(--panel2); border: 1px solid var(--border); border-radius: 7px; padding: 9px 10px; cursor: pointer; transition: border-color .15s; }
+  .card:hover { border-color: var(--accent); }
+  .card.pending { border-style: dashed; }
+  .card .c-id { font-family: Consolas, monospace; font-size: 11.5px; color: var(--accent); }
+  .card .c-desc { font-size: 12px; margin: 4px 0 6px; }
+  .card .c-meta { font-size: 11px; color: var(--muted); font-family: Consolas, monospace; display: flex; gap: 8px; flex-wrap: wrap; }
+  .card .c-meta .g { color: var(--good); } .card .c-meta .r { color: var(--bad); }
+  .card .g-badge { font-size: 10px; border-radius: 8px; padding: 0 6px; margin-left: auto; font-weight: 700; }
+  .g-pass { background: rgba(63,185,80,.15); color: var(--good); }
+  .g-fail { background: rgba(248,81,73,.15); color: var(--bad); }
+  .g-inc { background: rgba(210,153,34,.15); color: var(--warn); }
+  .g-run { background: rgba(77,159,255,.15); color: var(--accent); }
+  .card.promoted-card { border-color: var(--good); background: rgba(63,185,80,.06); }
+  .card .appr { font-size: 11px; color: var(--new); margin-top: 5px; font-family: Consolas, monospace; }
+  .card .rb-btn { display: block; margin-top: 6px; font-size: 11px; border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 5px; padding: 2px 8px; cursor: pointer; }
+  .card .rb-btn:hover { background: rgba(77,159,255,.12); }
+  .card.pending::after { content: "评测中…"; font-size: 10px; color: var(--warn); }
+
+  /* 审计时间线 */
+  .audit { margin-top: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+  .audit-head { padding: 8px 12px; font-size: 12.5px; color: var(--accent); cursor: pointer; user-select: none; display: flex; justify-content: space-between; }
+  .audit-body { padding: 6px 12px 12px; max-height: 240px; overflow-y: auto; }
+  .audit-body.collapsed { display: none; }
+  .tl { list-style: none; }
+  .tl li { position: relative; padding: 0 0 9px 18px; border-left: 2px solid var(--border); margin-left: 6px; font-size: 12.5px; }
+  .tl li::before { content: ""; position: absolute; left: -5.5px; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+  .tl li.good::before { background: var(--good); } .tl li.bad::before { background: var(--bad); } .tl li.warn::before { background: var(--warn); }
+  .tl .t { font-family: Consolas, monospace; font-size: 11px; color: var(--muted); margin-right: 8px; }
+
+  /* 详情 modal */
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .modal-mask.open { display: flex; }
+  .modal { width: 520px; max-width: 92vw; max-height: 82vh; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .modal h3 { font-size: 15px; margin-bottom: 10px; }
+  .modal .kv { display: flex; gap: 10px; padding: 4px 0; border-bottom: 1px dashed #2b3644; font-size: 12.5px; }
+  .modal .kv .k { color: var(--muted); width: 130px; flex-shrink: 0; }
+  .modal .kv .v { font-family: Consolas, monospace; word-break: break-all; }
+  .modal .close { float: right; border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+  .foot { text-align: center; color: var(--muted); font-size: 11.5px; padding: 0 22px 18px; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>DSH 评测+进化控制台 · UI 原型 v2</h1>
+  <div class="sub">对齐真实插件结构：<code>conversation.view</code> 标签页（仿 dsh-context 的注册方式）· 六列看板（仿 dsh-web-ui 任务看板形态）· Host 数据走 <code>GET /eval/state</code> + SSE</div>
+</div>
+
+<div class="notice">
+  <b>本页模拟 DSH Web GUI 的会话界面</b>：左侧栏与标签环是界面示意；「进化」标签 = 未来 <code>dsh-eval-console</code> 插件注册进
+  <code>conversation.view</code> 槽（chat=0 / trajectory=10 / 进化=20）后的样子。卡片数据形态取自 <code>research/evolution-loop-demo.mjs</code> 真实运行；
+  <b>静态原型，未连接真实存储</b>。紫色 <code>approvalId / gateRunId</code> = 本次 resolveCurrent() 改动新增的可见字段。
+</div>
+
+<div class="app">
+  <!-- 左栏：DSH GUI 外壳示意 -->
+  <div class="sidebar">
+    <div class="brand">DSH <b>WEB GUI</b> · 外壳示意</div>
+    <div class="ws-item active"><span class="dot"></span>dsh-eval</div>
+    <div class="ws-item"><span class="dot"></span>benchmark 核验</div>
+    <div class="ws-item"><span class="dot"></span>research</div>
+    <div class="side">会话列表/工作区为示意，面板内容与真实 DSH 外壳无关</div>
+  </div>
+
+  <div class="main">
+    <!-- 会话头部 + 视图标签环 -->
+    <div class="sess-head">
+      <div class="sess-title">dsh-eval · <b>评测+进化演示</b></div>
+      <div class="view-tabs">
+        <button class="view-tab chat" data-view="chat">聊天</button>
+        <button class="view-tab" data-view="trajectory">轨迹</button>
+        <button class="view-tab active" data-view="evo">进化<span class="new-tag">新</span></button>
+      </div>
+      <div class="slot-note">conversation.view · id: "evolution" · order: 20</div>
+    </div>
+
+    <div class="view-body">
+      <!-- Chat 占位 -->
+      <div class="view-pane" id="pane-chat" style="display:none">
+        <div class="chat-placeholder">
+          <div class="chat-line"><div class="who">user</div>两个都跑一遍吧。</div>
+          <div class="chat-line"><div class="who">assistant</div>已跑：preset-registry 8/8 · evolution-controller 7/7 · 闭环演示（PASS→approve→history→反例 REJECTED/INCONCLUSIVE）</div>
+          <div style="font-size:11px;color:#5c6a79;margin-top:10px">Chat 视图为占位示意；本原型聚焦「进化」标签页。</div>
+        </div>
+      </div>
+      <div class="view-pane" id="pane-trajectory" style="display:none">
+        <div class="chat-placeholder"><div style="font-size:11px;color:#5c6a79">Trajectory 视图为占位（原型不涉及）。</div></div>
+      </div>
+
+      <!-- 进化视图 -->
+      <div class="view-pane" id="pane-evo">
+        <div class="evo">
+          <!-- 当前版本条 -->
+          <div class="current-bar">
+            <span class="cb-label">当前版本（GET /eval/state → resolveCurrent）</span>
+            <span class="cb-rev">coding-9618c5dd</span>
+            <span class="cb-score">overall <b>0.80</b> <span class="up">▲ +0.38</span> vs 基线 0.42</span>
+            <span class="badge cb-badge">GATE PASS</span>
+            <span class="cb-new">gateRunId=evr-mt3te8rc-207s5o · approvalId=user-approved-2026-08-20</span>
+          </div>
+
+          <!-- 六列看板 -->
+          <div class="board-wrap">
+            <div class="board">
+              <div class="col"><div class="col-head st-sealed">SEALED <span class="cnt">1</span></div><div class="col-body" id="col-sealed"></div></div>
+              <div class="col"><div class="col-head st-evaluating">EVALUATING <span class="cnt">1</span></div><div class="col-body" id="col-evaluating"></div></div>
+              <div class="col"><div class="col-head st-accepted">ACCEPTED <span class="cnt">1</span></div><div class="col-body" id="col-accepted"></div></div>
+              <div class="col"><div class="col-head st-promoted">PROMOTED <span class="cnt">2</span></div><div class="col-body" id="col-promoted"></div></div>
+              <div class="col"><div class="col-head st-rejected">REJECTED <span class="cnt">1</span></div><div class="col-body" id="col-rejected"></div></div>
+              <div class="col"><div class="col-head st-inconclusive">INCONCLUSIVE <span class="cnt">1</span></div><div class="col-body" id="col-inconclusive"></div></div>
+            </div>
+          </div>
+
+          <!-- 审计时间线 -->
+          <div class="audit">
+            <div class="audit-head" id="audit-toggle">审计 ledger（append-only · GET /eval/state → ledger）<span id="audit-arrow">▾</span></div>
+            <div class="audit-body" id="audit-body">
+              <ul class="tl">
+                <li class="good"><span class="t">14:32:07</span><b>promoted</b> rev=coding-9618c5dd · approvalId=user-approved-2026-08-20 · gateRunId=evr-mt3te8rc-207s5o</li>
+                <li class="good"><span class="t">14:29:47</span><b>gate PASS</b> +0.38 · digestOk · epochSame · canary/holdout 通过 → ACCEPTED</li>
+                <li class=""><span class="t">14:29:20</span><b>sealed</b> rev=coding-9618c5dd · digest=9618c5dd…（内容寻址不可变）</li>
+                <li class=""><span class="t">14:28:53</span><b>candidate-created</b> 变异 2 条：persona 重写 + 补 fs.writeFile 工具</li>
+                <li class=""><span class="t">14:28:31</span><b>created</b> run=evr-mt3te8rc-207s5o · 失败簇: prompt-following/basic · tool-call/fs-write</li>
+                <li class="bad"><span class="t">14:25:10</span><b>gate FAIL</b> correctness 0.85→0.30 → REJECTED（current 未受影响）</li>
+                <li class="warn"><span class="t">14:24:40</span><b>gate INCONCLUSIVE</b> gain +0.001 ≤ minEffect 0.05 → 可 resample</li>
+                <li class=""><span class="t">14:22:00</span><b>created</b> run=evr-mt3te8rc-207s5o 前身 · 初始安装 install-gate/install-approved</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="foot">DSH Eval + Evolution · UI 原型 v2 · conversation.view 标签页 + 六列看板 · 静态演示（未连接真实存储）</div>
+
+<!-- 详情 Modal -->
+<div class="modal-mask" id="modal-mask">
+  <div class="modal" id="modal">
+    <button class="close" id="modal-close">✕</button>
+    <h3 id="modal-title">候选详情</h3>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+  // ===== 视图标签切换（conversation.view 环） =====
+  document.querySelectorAll('.view-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.view-pane').forEach(p => p.style.display = 'none');
+      document.getElementById('pane-' + tab.dataset.view).style.display = '';
+    });
+  });
+
+  // ---------------- 看板数据（形态取自 evolution-loop-demo.mjs 真实运行） ----------------
+  const CARDS = {
+    sealed: [
+      { id: 'cand-a01f', desc: 'persona 重写 + 补 fs.writeFile 工具', meta: 'src=9618c5dd… · 基线 0.42 · 13/30 通过', badge: { t: 'DRAFT→SEALED', c: 'g-run' }, detail: { 'candidateId': 'cand-a01f', 'runId': 'evr-mt3te8rc-207s5o', 'logicalId': 'coding', 'sourceRevisionId': 'coding-e6810aa5', 'mutations': ['persona 重写（失败簇 prompt-following/basic）', '增加 fs.writeFile 工具（失败簇 tool-call/fs-write）'], 'digest': '9618c5dd2f9e…（64 位 SHA-256，seal 时计算）', 'status': 'SEALED → 等待 EVALUATING' } }
+    ],
+    evaluating: [
+      { id: 'cand-b22e', title: 'v2 变异（canary/holdout 评测中）', meta: 'run evr-mt5… · 3/3 用例', badge: { t: 'RUNNING', c: 'g-inc' }, pending: true, detail: { 'candidateId': 'cand-b22e', 'runId': 'run-…（第二波，示例）', 'state': 'EVALUATING', 'note': '原型示例卡片：展示评测中 pending 标记；真实数据由 GET /eval/state 的 runs 提供' } }
+    ],
+    accepted: [
+      { id: 'cand-c33d', title: '整体 0.80 ▲+0.38 · 全维度无回归', meta: 'canary ✓ holdout ✓ digestOk ✓ epochSame ✓', badge: { t: 'GATE PASS', c: 'g-pass' }, detail: { 'candidateId': 'cand-c33d', 'baseline.overall': '0.42（30 例 / 13 通过）', 'candidate.overall': '0.80', 'gain': '+0.38', 'gate': 'PASS：digestOk、epochSame、gain > minEffect(0.05)、无 correctness/safety/verification 回归、canary/holdout 通过', 'status': 'ACCEPTED → 可 promote（需 approvalId）' } }
+    ],
+    promoted: [
+      { id: 'coding-9618c5dd', title: '当前版本（active）', meta: 'overall 0.80 · digest 9618c5dd…', badge: { t: 'PROMOTED', c: 'g-pass' }, active: true, appr: 'gateRun=evr-mt3te8rc-207s5o · approvalId=user-approved-2026-08-20', detail: { 'revisionId': 'coding-9618c5dd', 'digest': '9618c5dd2f9e…', 'overall': '0.80（▲+0.38 vs 0.42）', 'gateRunId': 'evr-mt3te8rc-207s5o（resolveCurrent 新增字段）', 'approvalId': 'user-approved-2026-08-20（resolveCurrent 新增字段）', 'updatedAt': '2026-08-20T14:32:07Z', 'resolved': 'null（新 Session 生效；老 Session 保持旧版）' } },
+      { id: 'coding-e6810aa5', title: 'previous · 初始安装', meta: 'install-gate · install-approved', rb: true, detail: { 'revisionId': 'coding-e6810aa5', 'approvedBy': 'install-gate · install-approved', 'note': '回滚目标：O(1) 指针切换，历史保留' } }
+    ],
+    rejected: [
+      { id: 'cand-d44f', title: 'correctness 0.85 → 0.30', meta: 'regression in: correctness, verification', badge: { t: 'GATE FAIL', c: 'g-fail' }, detail: { 'candidateId': 'cand-d44f', 'baseline.overall': '0.85', 'candidate.overall': '0.30', 'gate': 'FAIL：correctness 回归（0.85→0.30）+ verification 回归', 'status': 'REJECTED（终态）· current 未受影响' } }
+    ],
+    inconclusive: [
+      { id: 'cand-e55e', title: 'gain +0.001 ≤ minEffect 0.05', meta: '可 resample 重跑 → EVALUATING', badge: { t: 'INCONCLUSIVE', c: 'g-inc' }, detail: { 'candidateId': 'cand-e55e', 'gain': '+0.001', 'minEffect': '0.05（gateOverrides）', 'gate': 'INCONCLUSIVE：提升量不足 → 不可 promote，可 resample', 'status': 'INCONCLUSIVE → resample → EVALUATING' } }
+    ]
+  ];
+
+  function cardHTML(c) {
+    const meta = c.meta ? `<div class="c-meta">${c.meta}</div>` : '';
+    const badge = c.badge ? `<span class="g-badge ${c.badge.c}">${c.badge.t}</span>` : '';
+    const appr = c.appr ? `<div class="appr">🆕 ${c.appr}</div>` : '';
+    const rb = c.rb ? '<button class="rb-btn" data-rb="' + c.id + '">回滚到这里（模拟 O(1)）</button>' : '';
+    return `<div class="card ${c.pending?'pending':''} ${c.active?'passed-card':''}" data-card="${c.id}">
+      <div class="c-id">${c.id}</div>
+      <div class="c-desc">${c.title || ''}</div>
+      ${meta}${badge}${appr}${rb}</div>`;
+  }
+
+  for (const col of ['sealed','evaluating','accepted','promoted','rejected','inconclusive']) {
+    document.getElementById('col-' + col).innerHTML = CARDS[col].map(colHTML).join('');
+  }
+
+  // 卡片点击 → 详情 modal
+  document.querySelectorAll('.board .card').forEach(card => {
+    card.addEventListener('click', e => {
+      if (e.target.classList.contains('rb-btn')) return;
+      const cardData = findCard(card.dataset.card);
+      if (!cardData) return;
+      openModal(cardData);
+    });
+  });
+
+  function findCard(id) {
+    for (const k in CARDS) {
+      const c = CARDS[k].find(x => x.id === id);
+      if (c) return c;
+    }
+    return null;
+  }
+
+  function openModal(c) {
+    const rows = Object.entries(c.detail || {}).map(([k, v]) => `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
+    document.getElementById('modal-title').textContent = '候选 · ' + c.id;
+    document.getElementById('modal-body').innerHTML = rows;
+    document.getElementById('modal-mask').classList.add('open');
+  }
+  document.getElementById('modal-close').addEventListener('click', () => document.getElementById('modal-mask').classList.remove('open'));
+  document.getElementById('modal-mask').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('open'); });
+
+  // 回滚模拟
+  document.querySelectorAll('.rb-btn').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const prev = CARDS.promoted.find(c => c.id === 'coding-e6810aa5');
+    const cur = CARDS.promoted.find(c => c.id === 'coding-9618c5dd');
+    // 原型内切标记
+    alert('模拟回滚 → current 指针切到 ' + prev.id + '（O(1)，历史保留，需用户确认；原型未写真实存储）');
+  }));
+
+  // 审计折叠
+  const at = document.getElementById('audit-toggle');
+  at.addEventListener('click', () => {
+    const b = document.getElementById('audit-body');
+    b.classList.toggle('collapsed');
+    document.getElementById('audit-arrow').textContent = b.classList.contains('collapsed') ? '▸' : '▾';
+  });
+</script>
+</body>
+</html>

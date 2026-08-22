@@ -33,6 +33,8 @@ test('resolveCurrent returns stable current revision', async (t) => {
   const resolved = await registry.resolveCurrent('coding');
   assert.equal(resolved.revisionId, first.revisionId);
   assert.equal(resolved.digest, first.digest);
+  assert.equal(resolved.gateRunId, 'g1', 'gate run that promoted the revision is exposed');
+  assert.equal(resolved.approvalId, 'a1', 'approval binding of the promotion is exposed');
   const again = await registry.resolveCurrent('coding');
   assert.equal(again.revisionId, resolved.revisionId);
 });
@@ -87,6 +89,8 @@ test('crash recovery: stray .tmp removed and WAL replays missing pointer', async
   const resolved = await fresh.resolveCurrent('coding');
   assert.ok(resolved, 'pointer must be recovered');
   assert.equal(resolved.revisionId, v2.revisionId, 'WAL replay must restore the last promote');
+  assert.equal(resolved.gateRunId, 'g2', 'WAL replay restores the gate run binding');
+  assert.equal(resolved.approvalId, 'a2', 'WAL replay restores the approval binding');
 });
 
 test('gcCandidates removes only unsealed DRAFT candidates, never sealed ones', async (t) => {

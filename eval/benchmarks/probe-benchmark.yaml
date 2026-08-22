@@ -1,0 +1,13 @@
+name: probe-credential-injection
+model: deepseek-v4-flash:0731
+profile: headless
+command: [node, E:/github/dsh-eval/eval/benchmarks/probe-env.mjs]
+trials: 1
+timeoutMs: 30000
+seed: 42
+cases:
+  - id: probe-1
+    prompt: probe env injection
+    workspace: ./fixtures/probe
+    expected:
+      check: 'node -e "process.exit(require(''fs'').existsSync(''probe-env.json'') ? 0 : 1)"'

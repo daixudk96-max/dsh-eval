@@ -1,0 +1,21 @@
+{
+  "benchmark": "evaluate-preset-v2-self",
+  "model": "deepseek-v4-flash",
+  "createdAt": 1787391286668,
+  "trials": 1,
+  "seed": 42,
+  "pricing": null,
+  "tempRoot": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-ygpO8g",
+  "cases": [
+    {
+      "caseId": "eval-real-session",
+      "trial": 1,
+      "status": "error",
+      "error": "no session log found; dsh exited with code 1: wrapper: installed eval profile -> C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-ygpO8g\\eval-real-session-1\\dsh-home\\profiles\\eval\nwrapper: wrote child settings.yaml (provider clipa, model deepseek-v4-flash)\nwrapper: injected credential ref CLIPA_API_KEY into child env\nwrapper: merged preset evaluate rows into overlay -> C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-ygpO8g\\eval-real-session-1\\dsh-home\\eval-overlay.cordis.yml\nfile:///E:/github/dsh/packages/boot/app-boot/lib/index.js:839\r\n\t\tthrow new Error(`${binName}: failed to parse ${label} ${file}: ${String(error)}`);\r\n\t\t      ^\r\n\r\nError: dsh: failed to parse overlay C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-ygpO8g\\eval-real-session-1\\dsh-home\\eval-overlay.cordis.yml: YAMLException: bad indentation of a mapping entry (92:7)\r\n\r\n 89 | \r\n 90 | ## Rules\r\n 91 | \r\n 92 |       - Never run `dsh plugin` agains ...\r\n------------^\r\n 93 |         only one you touch for evalua ...\r\n 94 |       - Long-running runs should use  ...\r\n    at parsePatchList (file:///E:/github/dsh/packages/boot/app-boot/lib/index.js:839:9)\r\n    at loadOverlayPatches (file:///E:/github/dsh/packages/boot/app-boot/lib/index.js:819:9)\r\n    at file:///E:/github/dsh/apps/cli/lib/profile-boot-DG5t9aNs.js:169:48\r\n    at Array.flatMap (<anonymous>)\r\n    at composeProfile (file:///E:/github/dsh/apps/cli/lib/profile-boot-DG5t9aNs.js:169:30)\r\n    at runProfile (file:///E:/github/dsh/apps/cli/lib/profile-boot-DG5t9aNs.js:221:19)\r\n    at file:///E:/github/dsh/apps/cli/lib/bin.js:133:9\r\n\r\nNode.js v24.4.1\r\n",
+      "exitCode": 1,
+      "timedOut": false
+    }
+  ],
+  "aggregate": null,
+  "grading": null
+}

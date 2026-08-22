@@ -1,0 +1,8 @@
+{
+  "run": "eval\\benchmarks\\run-rubric-candidate.json",
+  "score": 8,
+  "score0_100": 80,
+  "maxScore": 10,
+  "rationale": "Completeness 9 (all required metrics present but tool-call/result/success counts are slightly ambiguous), accuracy 8 (120/126 = 95.2% while the reported 96.8% only matches success/results, and JSON cannot be independently verified), analysis 8 (identifies the high input-token/context risk but does not examine the specific invalid calls), overall 8.",
+  "at": "2026-08-22T14:12:40.588Z"
+}

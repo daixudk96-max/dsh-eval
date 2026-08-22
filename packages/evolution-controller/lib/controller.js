@@ -69,19 +69,32 @@ class EvolutionController {
   }
 
   /** Run the Code Gate; SEALED → EVALUATING → ACCEPTED | REJECTED | INCONCLUSIVE | INVALID. */
-  async evaluate(runId, { baseline, candidate, gateOverrides = {} }) {
+  async evaluate(runId, { baseline, candidate, gateOverrides = {}, rubric }) {
     const run = this._require(runId);
     assertTransition(run.state, 'EVALUATING');
     run.state = 'EVALUATING';
-    const gateResult = evaluateGate({ baseline, candidate, ...this.gateDefaults, ...gateOverrides });
+    const rubricOverrides = rubric !== undefined
+      ? {
+          rubricScore: rubric.score,
+          rubricMinScore: rubric.minScore,
+          rubricRegressions: rubric.regressions ?? [],
+        }
+      : {};
+    const gateResult = evaluateGate({ baseline, candidate, ...this.gateDefaults, ...gateOverrides, ...rubricOverrides });
     run.gateResult = gateResult;
     run.decision = gateResult.decision;
+    run.rubric = rubric; // raw rubric evidence kept on the run for audit
     // map gate decision to state
     if (gateResult.decision === 'PASS') run.state = 'ACCEPTED';
     else if (gateResult.decision === 'INCONCLUSIVE') run.state = 'INCONCLUSIVE';
     else if (gateResult.decision === 'INVALID') run.state = 'INVALID';
     else run.state = 'REJECTED'; // FAIL
-    await this._audit({ runId, event: 'gate', from: 'EVALUATING', to: run.state, decision: gateResult.decision, reason: gateResult.reason });
+    await this._audit({
+      runId, event: 'gate', from: 'EVALUATING', to: run.state, decision: gateResult.decision, reason: gateResult.reason,
+      ...(rubric !== undefined
+        ? { rubric: { score: rubric.score, minScore: rubric.minScore, regressions: rubric.regressions ?? [] } }
+        : {}),
+    });
     return run;
   }
 

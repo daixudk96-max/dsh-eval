@@ -1,0 +1,88 @@
+{
+  "benchmark": "evaluate-preset-rubric-candidate",
+  "model": "deepseek-v4-flash",
+  "createdAt": 1787407880358,
+  "trials": 1,
+  "seed": 42,
+  "pricing": null,
+  "judge": {
+    "provider": "clipa",
+    "model": "deepseek-v4-flash",
+    "rubric": "Score the agent's REPORT.md deliverable on a 0-10 scale per dimension:\n(1) completeness: metrics table with steps, tool calls, tool success rate,\n    tokens present and internally consistent;\n(2) accuracy: numbers match the imported report JSON, no invented metrics;\n(3) analysis: a Chinese conclusion that identifies failures or risks,\n    not just a restatement of the table.\nReport each dimension separately in the rationale.\n",
+    "maxScore": 10
+  },
+  "tempRoot": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-vRXAUk",
+  "cases": [
+    {
+      "caseId": "eval-real-session",
+      "trial": 1,
+      "status": "completed",
+      "tracePath": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-vRXAUk\\eval-real-session-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-vRXAUk-eval-real-session-1-workspace--\\session-4841f88f-7044-4f14-b3ea-c4029f0bb609\\session.jsonl",
+      "tracePaths": [
+        "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-vRXAUk\\eval-real-session-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-vRXAUk-eval-real-session-1-workspace--\\session-4841f88f-7044-4f14-b3ea-c4029f0bb609\\session.jsonl"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "metrics": {
+        "turns": 1,
+        "steps": 35,
+        "toolCalls": 50,
+        "toolResults": 50,
+        "toolSuccess": 50,
+        "toolSuccessRate": 1,
+        "invalidToolCalls": 0,
+        "retries": 0,
+        "tokens": {
+          "inputTokens": 90760,
+          "cacheReadTokens": 1547008,
+          "cacheWriteTokens": 0,
+          "outputTokens": 20259
+        },
+        "totalTokens": 1658027,
+        "contextTokens": 1637768,
+        "llmMs": 215507,
+        "toolMs": 37458,
+        "ttftMs": 91446,
+        "latencyMs": 254498,
+        "costUsd": null
+      },
+      "grade": {
+        "taskSuccess": true,
+        "toolSelectionAccuracy": true
+      },
+      "judge": {
+        "finalAnswerScore": null,
+        "hallucination": null
+      }
+    }
+  ],
+  "aggregate": {
+    "turns": 1,
+    "steps": 35,
+    "toolCalls": 50,
+    "toolResults": 50,
+    "toolSuccess": 50,
+    "toolSuccessRate": 1,
+    "invalidToolCalls": 0,
+    "retries": 0,
+    "tokens": {
+      "inputTokens": 90760,
+      "cacheReadTokens": 1547008,
+      "cacheWriteTokens": 0,
+      "outputTokens": 20259
+    },
+    "totalTokens": 1658027,
+    "contextTokens": 1637768,
+    "llmMs": 215507,
+    "toolMs": 37458,
+    "ttftMs": 91446,
+    "latencyMs": 254498,
+    "costUsd": null
+  },
+  "grading": {
+    "taskSuccessRate": 1,
+    "toolSelectionAccuracyRate": 1,
+    "finalAnswerScore": null,
+    "hallucinationRate": null
+  }
+}
