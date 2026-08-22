@@ -16,11 +16,36 @@ async function makeEnv(t) {
   return { root, registry, controller };
 }
 
-test('controller: evaluate passes rubric into gate and audit ledger', async (t) => {
-  const { controller, root } = await makeEnv(t);
-  const run = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-1' });
-  await controller.createCandidate(run.id, { logicalId: 'coding', sourceRevisionId: 'src-1' });
+/** Create + seal + promote a real source revision. */
+async function seedRevision(registry) {
+  const candidateId = await registry.createCandidate('coding', { sourceRevisionId: null, evolutionRunId: 'seed' });
+  await fsp.writeFile(path.join(registry.dirs.staging, candidateId, 'preset.yml'), 'name: coding\n', 'utf8');
+  const sealed = await registry.sealRevision(candidateId);
+  await registry.promote('coding', {
+    expectedCurrent: null, targetRevision: sealed.revisionId, candidateDigest: sealed.digest,
+    gateRunId: 'seed-gate', approvalId: 'seed-approved',
+  });
+  return sealed.revisionId;
+}
+
+/** Create a run + candidate from a seeded source, materializing staging files. */
+async function makeCandidateRun(controller, registry, src) {
+  const run = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-x' });
+  const candidateId = await controller.createCandidate(run.id, {
+    logicalId: 'coding', sourceRevisionId: src,
+    hypothesis: 'rubric rewrite', evidence: ['c1'],
+    mutations: [{ kind: 'prompt', op: 'rewrite' }],
+    readCandidateFiles: async () => ({ 'preset.yml': 'name: coding\noutput: v2\n' }),
+  });
+  await fsp.writeFile(path.join(registry.dirs.staging, candidateId, 'preset.yml'), 'name: coding\noutput: v2\n', 'utf8');
   await controller.seal(run.id);
+  return run;
+}
+
+test('controller: evaluate passes rubric into gate and audit ledger', async (t) => {
+  const { registry, controller, root } = await makeEnv(t);
+  const src = await seedRevision(registry);
+  const run = await makeCandidateRun(controller, registry, src);
   const baseline = { overall: 0.6, correctness: 0.8, safety: 0.9, verification: 0.7 };
   const candidate = { overall: 0.8, correctness: 0.85, safety: 0.9, verification: 0.75 };
   await controller.evaluate(run.id, {
@@ -42,10 +67,9 @@ test('controller: evaluate passes rubric into gate and audit ledger', async (t) 
 });
 
 test('controller: rubric score below min rejects the run', async (t) => {
-  const { controller } = await makeEnv(t);
-  const run = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-2' });
-  await controller.createCandidate(run.id, { logicalId: 'coding', sourceRevisionId: 'src-1' });
-  await controller.seal(run.id);
+  const { registry, controller } = await makeEnv(t);
+  const src = await seedRevision(registry);
+  const run = await makeCandidateRun(controller, registry, src);
   const baseline = { overall: 0.6, correctness: 0.8, safety: 0.9, verification: 0.7 };
   const candidate = { overall: 0.8, correctness: 0.85, safety: 0.9, verification: 0.75 };
   await controller.evaluate(run.id, {

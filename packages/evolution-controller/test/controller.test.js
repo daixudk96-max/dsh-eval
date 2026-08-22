@@ -18,6 +18,24 @@ async function makeEnv(t) {
   return { root, registry, controller };
 }
 
+/** Create + seal + promote a real source revision (proposal-check requires an existing source). */
+async function seedRevision(registry, logicalId = 'coding', files = { 'preset.yml': 'name: coding\n' }) {
+  const candidateId = await registry.createCandidate(logicalId, { sourceRevisionId: null, evolutionRunId: 'seed' });
+  const dir = path.join(registry.dirs.staging, candidateId);
+  for (const [name, content] of Object.entries(files)) {
+    await fsp.writeFile(path.join(dir, name), content, 'utf8');
+  }
+  const sealed = await registry.sealRevision(candidateId);
+  await registry.promote(logicalId, {
+    expectedCurrent: null, targetRevision: sealed.revisionId, candidateDigest: sealed.digest,
+    gateRunId: 'seed-gate', approvalId: 'seed-approved',
+  });
+  return sealed.revisionId;
+}
+
+const GOOD_FILES = { 'preset.yml': 'name: coding\noutput: v2\n' };
+const candidateFiles = () => GOOD_FILES;
+
 test('state machine: valid + invalid transitions', () => {
   assert.ok(canTransition('DRAFT', 'SEALED'));
   assert.ok(canTransition('SEALED', 'EVALUATING'));
@@ -46,9 +64,14 @@ test('gate: four decisions', () => {
 });
 
 test('controller: full happy path creates candidate, seals, gates PASS, promotes with approval', async (t) => {
-  const { controller } = await makeEnv(t);
+  const { registry, controller } = await makeEnv(t);
+  const src = await seedRevision(registry);
   const run = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-1', selectedFailureClusters: ['c1'] });
-  await controller.createCandidate(run.id, { logicalId: 'coding', sourceRevisionId: 'src-1', mutations: [{ kind: 'prompt', op: 'rewrite' }] });
+  await controller.createCandidate(run.id, {
+    logicalId: 'coding', sourceRevisionId: src,
+    hypothesis: 'rewrite improves prompt adherence', evidence: ['c1'],
+    mutations: [{ kind: 'prompt', op: 'rewrite' }], readCandidateFiles: candidateFiles,
+  });
   const sealed = await controller.seal(run.id);
   assert.equal(run.state, 'SEALED');
   const baseline = { overall: 0.6, correctness: 0.8, safety: 0.9, verification: 0.7 };
@@ -63,9 +86,14 @@ test('controller: full happy path creates candidate, seals, gates PASS, promotes
 });
 
 test('controller: INCONCLUSIVE is not promotable and can resample', async (t) => {
-  const { controller } = await makeEnv(t);
+  const { registry, controller } = await makeEnv(t);
+  const src = await seedRevision(registry);
   const run = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-2' });
-  await controller.createCandidate(run.id, { logicalId: 'coding', sourceRevisionId: 'src-1' });
+  await controller.createCandidate(run.id, {
+    logicalId: 'coding', sourceRevisionId: src,
+    hypothesis: 'slightly better prompt', evidence: ['c1'],
+    mutations: [{ kind: 'prompt', op: 'rewrite' }], readCandidateFiles: candidateFiles,
+  });
   await controller.seal(run.id);
   const baseline = { overall: 0.6, correctness: 0.8, safety: 0.9, verification: 0.7 };
   await controller.evaluate(run.id, { baseline, candidate: { overall: 0.62, correctness: 0.8, safety: 0.9, verification: 0.7 }, gateOverrides: { minEffect: 0.05 } });
@@ -76,9 +104,14 @@ test('controller: INCONCLUSIVE is not promotable and can resample', async (t) =>
 });
 
 test('controller: promote requires ACCEPTED state and approvalId', async (t) => {
-  const { controller } = await makeEnv(t);
+  const { registry, controller } = await makeEnv(t);
+  const src = await seedRevision(registry);
   const run = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-3' });
-  await controller.createCandidate(run.id, { logicalId: 'coding', sourceRevisionId: 'src-1' });
+  await controller.createCandidate(run.id, {
+    logicalId: 'coding', sourceRevisionId: src,
+    hypothesis: 'rewrite A', evidence: ['c1'],
+    mutations: [{ kind: 'prompt', op: 'rewrite' }], readCandidateFiles: candidateFiles,
+  });
   await controller.seal(run.id);
   // SEALED (not evaluated) is not promotable
   await assert.rejects(() => controller.promote(run.id, { logicalId: 'coding', approvalId: 'a' }), /cannot promote/);
@@ -89,7 +122,11 @@ test('controller: promote requires ACCEPTED state and approvalId', async (t) => 
   await assert.rejects(() => controller.promote(run.id, { logicalId: 'coding', approvalId: 'a' }), /cannot promote/);
   // ACCEPTED without approvalId must be rejected
   const run2 = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-3b' });
-  await controller.createCandidate(run2.id, { logicalId: 'coding', sourceRevisionId: 'src-1' });
+  await controller.createCandidate(run2.id, {
+    logicalId: 'coding', sourceRevisionId: src,
+    hypothesis: 'rewrite prompt again', evidence: ['c1'],
+    mutations: [{ kind: 'prompt', op: 'rewrite' }], readCandidateFiles: candidateFiles,
+  });
   await controller.seal(run2.id);
   await controller.evaluate(run2.id, { baseline, candidate: { overall: 0.8, correctness: 0.85, safety: 0.9, verification: 0.75 } });
   assert.equal(run2.state, 'ACCEPTED');
@@ -97,9 +134,14 @@ test('controller: promote requires ACCEPTED state and approvalId', async (t) => 
 });
 
 test('controller: every decision is audited append-only', async (t) => {
-  const { controller, root } = await makeEnv(t);
+  const { registry, controller, root } = await makeEnv(t);
+  const src = await seedRevision(registry);
   const run = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-4' });
-  await controller.createCandidate(run.id, { logicalId: 'coding', sourceRevisionId: 'src-1' });
+  await controller.createCandidate(run.id, {
+    logicalId: 'coding', sourceRevisionId: src,
+    hypothesis: 'audited rewrite', evidence: ['c1'],
+    mutations: [{ kind: 'prompt', op: 'rewrite' }], readCandidateFiles: candidateFiles,
+  });
   await controller.seal(run.id);
   const baseline = { overall: 0.6, correctness: 0.8, safety: 0.9, verification: 0.7 };
   await controller.evaluate(run.id, { baseline, candidate: { overall: 0.8, correctness: 0.85, safety: 0.9, verification: 0.75 } });
@@ -114,9 +156,14 @@ test('controller: every decision is audited append-only', async (t) => {
 });
 
 test('controller: CAS protection — stale expectedCurrent is rejected at registry level', async (t) => {
-  const { controller } = await makeEnv(t);
+  const { registry, controller } = await makeEnv(t);
+  const src = await seedRevision(registry);
   const run = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-5' });
-  await controller.createCandidate(run.id, { logicalId: 'coding', sourceRevisionId: 'src-1' });
+  await controller.createCandidate(run.id, {
+    logicalId: 'coding', sourceRevisionId: src,
+    hypothesis: 'CAS rewrite', evidence: ['c1'],
+    mutations: [{ kind: 'prompt', op: 'rewrite' }], readCandidateFiles: candidateFiles,
+  });
   await controller.seal(run.id);
   const baseline = { overall: 0.6, correctness: 0.8, safety: 0.9, verification: 0.7 };
   await controller.evaluate(run.id, { baseline, candidate: { overall: 0.8, correctness: 0.85, safety: 0.9, verification: 0.75 } });

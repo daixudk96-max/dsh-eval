@@ -25,6 +25,8 @@ ledger/ledger.jsonl             append-only WAL
 - `promote(logicalId, { expectedCurrent, targetRevision, candidateDigest, gateRunId, approvalId })` — CAS 事务（WAL 先写 + 原子 rename）
 - `rollback(logicalId, oldRevisionId)` — O(1) 切指针，不删历史
 - `history(logicalId)` / `gcCandidates()` / `verifyRevisionDigest(digest)`
+- `revisionContent(digest)` — 读不可变 revision 的内容文件（排除 manifest/candidate/source 控制文件），
+  供语义比较（如近重复检测）
 
 ## 关键保证
 

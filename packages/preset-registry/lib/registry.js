@@ -241,6 +241,34 @@ class Registry {
     return { ok: recomputed === digest, recorded: digest, recomputed };
   }
 
+  /**
+   * Read an immutable revision's content files (everything except control
+   * bookkeeping: manifest.json / candidate.json / source.json), for semantic
+   * comparison such as near-duplicate detection.
+   * @param {string} digest - content-addressed revision digest.
+   * @returns {Promise<{ files: Record<string,string>, text: string } | null>}
+   *   null when the revision does not exist.
+   */
+  async revisionContent(digest) {
+    const dir = this._revisionDir(digest);
+    if (!fs.existsSync(dir)) return null;
+    const control = new Set(['manifest.json', 'candidate.json', 'source.json']);
+    const files = {};
+    const walk = async (rel) => {
+      const abs = rel === '' ? dir : path.join(dir, rel);
+      const st = await fsp.stat(abs);
+      if (st.isDirectory()) {
+        for (const name of await fsp.readdir(abs)) await walk(path.join(rel, name));
+        return;
+      }
+      if (control.has(path.basename(abs))) return;
+      files[rel.split(path.sep).join('/')] = await fsp.readFile(abs, 'utf8');
+    };
+    await walk('');
+    const text = Object.values(files).join('\n');
+    return { files, text };
+  }
+
   // ---- helpers ------------------------------------------------------------
 
   async _copyDir(src, dest) {
