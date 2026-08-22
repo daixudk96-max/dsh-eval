@@ -182,7 +182,7 @@ gate 新规则: rubricScore < rubricMinScore → FAIL
 |---|---|---|---|
 | P0(完成) | rubric 集成 §4: rubric.js + aggregate.js + gate/controller 扩展 | d-eval 基座不动 | 新增单测 + 一轮真实评测(现有 fix-multiply / evaluate-preset benchmark) |
 | P1(✅ 2026-08-22) | 评测侧: `split` 字段 + 与 guard 子集 + fail-closed gradeTrial | P0 | benchmark 双集跑通(taskSuccess 1.0 ×2, commit ea58fbc) |
-| P2 | 进化侧: proposer(失败证据→多假设候选)+ budget ledger + 近重复检测入 promote | P1 | evolution-real 第 4 轮 |
+| P2(✅ 2026-08-22) | 进化侧: proposer(失败证据→多假设候选)+ budget ledger + 近重复检测入 promote | P1 | proposal-check 11 测 / budget 6 测 / controller-p2 6 测全绿 + 真实闭环(见下) |
 | P3 | 治理: 审查脱敏(evolution-review.redact 可选)、`/evolve` 风格命令面(可选) | P2 | CLI 命令冒烟 |
 
 ## 6. 明确放弃(不再讨论)
