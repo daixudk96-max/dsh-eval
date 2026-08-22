@@ -48,3 +48,26 @@ P1 complete: benchmark cases[].split (dev/guard default dev), --split CLI filter
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: P2 进化侧工程化: proposer + budget + 近重复
+
+**Date**: 2026-08-23
+**Task**: P2 进化侧工程化: proposer + budget + 近重复
+**Branch**: `eval-evolve`
+
+### Summary
+
+proposal-check(假设+证据绑定, 拒 no-change/test-only/comment-only, W_p=3, 语义去重) + BudgetLedger(分桶 append-only, 超预算拒 newRun) + promote 近重复检测(默认开)。真实闭环: 失败簇变异候选评测超时 → gate FAIL 回归拒绝(修复 gate 顺序: 回归优先于 minEffect); 近重复/budget 真实拒绝。47 测试全绿。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ea97a45` | (see git log) |
+| `829b8d4` | (see git log) |
+| `d717886` | (see git log) |
+
+### Status
+
+[OK] **Completed**
