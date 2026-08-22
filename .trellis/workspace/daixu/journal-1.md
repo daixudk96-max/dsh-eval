@@ -71,3 +71,24 @@ proposal-check(假设+证据绑定, 拒 no-change/test-only/comment-only, W_p=3,
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: P2 验证: 缩小 sample session 重跑闭环
+
+**Date**: 2026-08-23
+**Task**: P2 验证: 缩小 sample session 重跑闭环
+**Branch**: `eval-evolve`
+
+### Summary
+
+sample 14x 缩小(112KB, 2 完整 turn)。真实重跑: baseline 1.0/63 步, candidate 1.0/37 步(预算内完成, 证实上轮超时是样本大小非候选能力)。gate INCONCLUSIVE 无增益证据 → 不 promote, current 不动。近重复/budget 拒绝再演示。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5ef371e` | (see git log) |
+
+### Status
+
+[OK] **Completed**

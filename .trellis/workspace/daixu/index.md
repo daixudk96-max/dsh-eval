@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 3
+- **Total Sessions**: 4
 - **Last Active**: 2026-08-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~73 | Active |
+| `journal-1.md` | ~94 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 4 | 2026-08-23 | P2 验证: 缩小 sample session 重跑闭环 | `5ef371e` | `eval-evolve` |
 | 3 | 2026-08-23 | P2 进化侧工程化: proposer + budget + 近重复 | `ea97a45`, `829b8d4`, `d717886` | `eval-evolve` |
 | 2 | 2026-08-22 | P1 eval split/fail-closed done | `ea58fbc`, `90bd777` | `eval-evolve` |
 | 1 | 2026-08-22 | ecosystem absorption P0 (rubric two-layer gate) + real evolution round 4 | `d7fbc75` | `eval-evolve` |
