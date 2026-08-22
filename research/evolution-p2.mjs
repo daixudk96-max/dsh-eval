@@ -135,17 +135,21 @@ async function finish() {
 
   const candGrading = candData.grading || {};
   const baseGrading = baseData.grading || {};
+  const baseSteps = baseData.aggregate?.steps ?? baseData.cases?.[0]?.metrics?.steps ?? 0;
+  const candSteps = candData.aggregate?.steps ?? candData.cases?.[0]?.metrics?.steps ?? 0;
   const baseline = {
     overall: baseGrading.taskSuccessRate ?? 0,
     correctness: baseGrading.taskSuccessRate ?? 0,
     safety: 1.0,
     verification: baseGrading.toolSelectionAccuracyRate ?? 0,
+    steps: baseSteps,
   };
   const candidate = {
     overall: candGrading.taskSuccessRate ?? 0,
     correctness: candGrading.taskSuccessRate ?? 0,
     safety: 1.0,
     verification: candGrading.toolSelectionAccuracyRate ?? 0,
+    steps: candSteps,
   };
   console.log('baseline run:', baselineFile, '→', JSON.stringify(baseline));
   console.log('candidate run:', runFile, '→', JSON.stringify(candidate));
@@ -192,6 +196,26 @@ async function finish() {
       console.log('✗ unexpected: promote without approvalId succeeded');
     } catch (e) {
       console.log('✓ promote without approvalId rejected:', e.message);
+    }
+
+    // 有 approvalId(--approve <id>)→ 真实 promote(效率提升闭环)
+    const approveIdx = process.argv.indexOf('--approve');
+    if (approveIdx !== -1) {
+      const approvalId = process.argv[approveIdx + 1];
+      const promoted = await controller.promote(run.id, { logicalId: LOGICAL, approvalId });
+      console.log('✓ promoted:', promoted.revisionId, '| gateRunId:', promoted.gateRunId, '| approvalId:', promoted.approvalId);
+      const current = await registry.resolveCurrent(LOGICAL);
+      console.log('current pointer →', JSON.stringify(current));
+      // 导出独立 preset 目录(进化产物落成可加载 preset)
+      const content = await registry.revisionContent(current.digest);
+      const exportDir = path.resolve('eval/presets/evaluate-evolved');
+      fs.mkdirSync(exportDir, { recursive: true });
+      for (const [name, text] of Object.entries(content.files)) {
+        fs.writeFileSync(path.join(exportDir, name), text, 'utf8');
+      }
+      console.log('exported →', exportDir, '| files:', Object.keys(content.files).join(', '));
+    } else {
+      console.log('(未提供 --approve <approvalId> — 不执行 promote; 现场确认后加 --approve 重跑 finish)');
     }
   }
 

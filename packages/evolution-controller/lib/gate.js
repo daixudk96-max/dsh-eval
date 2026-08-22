@@ -2,12 +2,20 @@
 
 /**
  * Code-owned Gate — pure function, no LLM self-certification.
+ * Code-owned Gate — pure function, no LLM self-certification.
  * Deterministic facts (digest/epoch/exitCode/regression/canary/holdout) are
  * judged by code. The rubric layer supplies LLM-judge-derived aggregate
  * scores (rubricScore/rubricMinScore/rubricRegressions); those rules are
  * ALSO enforced in code here, so a low-quality candidate fails the gate
  * without any human or model self-claim. When no rubric inputs are given
  * the rubric rules are skipped (backward compatible).
+ *
+ * Efficiency dimension (optional): when BOTH baseline.steps and
+ * candidate.steps are positive numbers, efficiencyGain =
+ * 1 - candidate.steps / baseline.steps is computed. A slower candidate is an
+ * efficiency regression (FAIL). Same-quality candidates may PASS on
+ * efficiency alone (efficiencyGain >= minEffect) — "same goal, fewer steps
+ * counts as an improvement". Without steps inputs behaviour is unchanged.
  *
  * Result decision ∈ { PASS, FAIL, INCONCLUSIVE, INVALID }.
  */
@@ -32,22 +40,41 @@ function evaluateGate({
 
   const gain = candidate.overall - baseline.overall;
 
+  // Efficiency dimension (only when both step counts are positive numbers).
+  const hasSteps = Number.isFinite(baseline.steps) && Number.isFinite(candidate.steps)
+    && baseline.steps > 0 && candidate.steps > 0;
+  const efficiencyGain = hasSteps ? 1 - candidate.steps / baseline.steps : null;
+  const efficiencyField = (obj) => (hasSteps ? { ...obj, efficiencyGain } : { ...obj, efficiencyGain: null });
+
   // Regressions are FAIL regardless of gain sign: a worse candidate must never
   // be labelled INCONCLUSIVE (checked BEFORE the minEffect threshold).
   const regressions = ['correctness', 'safety', 'verification'].filter(
     (k) => candidate[k] != null && baseline[k] != null && candidate[k] < baseline[k],
   );
   if (regressions.length > 0) {
-    return { decision: 'FAIL', reason: `regression in: ${regressions.join(', ')}`, gain, ruleSetVersion };
+    return efficiencyField({ decision: 'FAIL', reason: `regression in: ${regressions.join(', ')}`, gain, ruleSetVersion });
   }
 
-  if (gain <= minEffect) {
-    return {
-      decision: 'INCONCLUSIVE',
-      reason: `overall gain ${gain.toFixed(3)} <= minEffect ${minEffect} (not statistically significant)`,
+  // Efficiency regression: same quality but MORE steps is a FAIL too.
+  if (hasSteps && efficiencyGain < 0) {
+    return efficiencyField({
+      decision: 'FAIL',
+      reason: `efficiency regression: candidate steps ${candidate.steps} > baseline steps ${baseline.steps}`,
       gain,
       ruleSetVersion,
-    };
+    });
+  }
+
+  // INCONCLUSIVE only when neither quality nor efficiency moved enough.
+  if (gain <= minEffect && (!hasSteps || efficiencyGain < minEffect)) {
+    return efficiencyField({
+      decision: 'INCONCLUSIVE',
+      reason: hasSteps
+        ? `overall gain ${gain.toFixed(3)} <= minEffect ${minEffect} and efficiencyGain ${efficiencyGain.toFixed(3)} < minEffect ${minEffect} (no significant improvement)`
+        : `overall gain ${gain.toFixed(3)} <= minEffect ${minEffect} (not statistically significant)`,
+      gain,
+      ruleSetVersion,
+    });
   }
 
   if (!criticalAssertionsPassed) {
@@ -88,14 +115,17 @@ function evaluateGate({
     };
   }
 
-  return {
+  const passBase = {
     decision: 'PASS',
-    reason: 'all code gates passed',
+    reason: hasSteps
+      ? `all code gates passed (overall gain ${gain.toFixed(3)}${gain <= minEffect ? `, efficiency gain ${efficiencyGain.toFixed(3)} >= minEffect ${minEffect}` : ''})`
+      : 'all code gates passed',
     gain,
     ...(rubricScore != null ? { rubricScore, rubricMinScore } : {}),
     ...(rubricRegressions.length > 0 ? { rubricRegressions } : {}),
     ruleSetVersion,
   };
+  return efficiencyField(passBase);
 }
 
 module.exports = { evaluateGate };

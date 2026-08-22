@@ -34,7 +34,10 @@ function normalizeText(text) {
     .replace(/^\uFEFF/, '')
     .split(/\r?\n/u)
     .map((line) => line.trim())
-    .filter((line) => line !== '' && !line.startsWith('#'))
+    // Drop only YAML comment lines ("# ..." or a bare "#"), keep markdown
+    // headings ("## ..." carries semantic content — treating it as a comment
+    // made distinct revisions compare equal and near-duplicates undetectable).
+    .filter((line) => line !== '' && !/^#(?:\s|$)/u.test(line))
     .join('\n');
 }
 
