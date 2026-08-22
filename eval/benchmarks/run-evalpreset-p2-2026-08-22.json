@@ -1,0 +1,79 @@
+{
+  "benchmark": "evaluate-preset-p2",
+  "model": "deepseek-v4-flash",
+  "createdAt": 1787413855957,
+  "trials": 1,
+  "seed": 42,
+  "pricing": null,
+  "tempRoot": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-P69E5R",
+  "split": "dev",
+  "cases": [
+    {
+      "caseId": "eval-real-session",
+      "trial": 1,
+      "status": "completed",
+      "tracePath": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-P69E5R\\eval-real-session-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-P69E5R-eval-real-session-1-workspace--\\session-4d122eda-1162-4059-a3ff-c4224364d2d7\\session.jsonl",
+      "tracePaths": [
+        "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-P69E5R\\eval-real-session-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-P69E5R-eval-real-session-1-workspace--\\session-4d122eda-1162-4059-a3ff-c4224364d2d7\\session.jsonl"
+      ],
+      "exitCode": 1,
+      "timedOut": false,
+      "metrics": {
+        "turns": 1,
+        "steps": 1,
+        "toolCalls": 0,
+        "toolResults": 0,
+        "toolSuccess": 0,
+        "toolSuccessRate": null,
+        "invalidToolCalls": 0,
+        "retries": 0,
+        "tokens": {
+          "inputTokens": 0,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "outputTokens": 0
+        },
+        "totalTokens": 0,
+        "contextTokens": 0,
+        "llmMs": 0,
+        "toolMs": 0,
+        "ttftMs": 0,
+        "latencyMs": 393,
+        "costUsd": null
+      },
+      "grade": {
+        "taskSuccess": false,
+        "toolSelectionAccuracy": false
+      }
+    }
+  ],
+  "aggregate": {
+    "turns": 1,
+    "steps": 1,
+    "toolCalls": 0,
+    "toolResults": 0,
+    "toolSuccess": 0,
+    "toolSuccessRate": null,
+    "invalidToolCalls": 0,
+    "retries": 0,
+    "tokens": {
+      "inputTokens": 0,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "outputTokens": 0
+    },
+    "totalTokens": 0,
+    "contextTokens": 0,
+    "llmMs": 0,
+    "toolMs": 0,
+    "ttftMs": 0,
+    "latencyMs": 393,
+    "costUsd": null
+  },
+  "grading": {
+    "taskSuccessRate": 0,
+    "toolSelectionAccuracyRate": 0,
+    "finalAnswerScore": null,
+    "hallucinationRate": null
+  }
+}

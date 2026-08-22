@@ -31,6 +31,16 @@ function evaluateGate({
   if (!epochSame) return { decision: 'INVALID', reason: 'evaluation epoch changed', ruleSetVersion };
 
   const gain = candidate.overall - baseline.overall;
+
+  // Regressions are FAIL regardless of gain sign: a worse candidate must never
+  // be labelled INCONCLUSIVE (checked BEFORE the minEffect threshold).
+  const regressions = ['correctness', 'safety', 'verification'].filter(
+    (k) => candidate[k] != null && baseline[k] != null && candidate[k] < baseline[k],
+  );
+  if (regressions.length > 0) {
+    return { decision: 'FAIL', reason: `regression in: ${regressions.join(', ')}`, gain, ruleSetVersion };
+  }
+
   if (gain <= minEffect) {
     return {
       decision: 'INCONCLUSIVE',
@@ -38,13 +48,6 @@ function evaluateGate({
       gain,
       ruleSetVersion,
     };
-  }
-
-  const regressions = ['correctness', 'safety', 'verification'].filter(
-    (k) => candidate[k] != null && baseline[k] != null && candidate[k] < baseline[k],
-  );
-  if (regressions.length > 0) {
-    return { decision: 'FAIL', reason: `regression in: ${regressions.join(', ')}`, gain, ruleSetVersion };
   }
 
   if (!criticalAssertionsPassed) {

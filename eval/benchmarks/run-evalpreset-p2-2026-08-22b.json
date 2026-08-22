@@ -1,0 +1,52 @@
+{
+  "benchmark": "evaluate-preset-p2",
+  "model": "deepseek-v4-flash",
+  "createdAt": 1787414235520,
+  "trials": 1,
+  "seed": 42,
+  "pricing": null,
+  "tempRoot": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-jVmtCd",
+  "split": "dev",
+  "cases": [
+    {
+      "caseId": "eval-real-session",
+      "trial": 1,
+      "status": "failed",
+      "tracePath": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-jVmtCd\\eval-real-session-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-jVmtCd-eval-real-session-1-workspace--\\session-551f1d37-b39e-49aa-8fce-9954ab009cfd\\session.jsonl",
+      "tracePaths": [
+        "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-jVmtCd\\eval-real-session-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-jVmtCd-eval-real-session-1-workspace--\\session-551f1d37-b39e-49aa-8fce-9954ab009cfd\\session.jsonl"
+      ],
+      "exitCode": null,
+      "timedOut": true,
+      "metrics": {
+        "turns": 1,
+        "steps": 38,
+        "toolCalls": 45,
+        "toolResults": 45,
+        "toolSuccess": 45,
+        "toolSuccessRate": 1,
+        "invalidToolCalls": 0,
+        "retries": 0,
+        "tokens": {
+          "inputTokens": 85184,
+          "cacheReadTokens": 1764096,
+          "cacheWriteTokens": 0,
+          "outputTokens": 20613
+        },
+        "totalTokens": 1869893,
+        "contextTokens": 1849280,
+        "llmMs": 224422,
+        "toolMs": 56376,
+        "ttftMs": 98991,
+        "latencyMs": 293536,
+        "costUsd": null
+      },
+      "grade": {
+        "taskSuccess": false,
+        "toolSelectionAccuracy": true
+      }
+    }
+  ],
+  "aggregate": null,
+  "grading": null
+}

@@ -53,6 +53,12 @@ test('gate: four decisions', () => {
   assert.equal(evaluateGate({ baseline: base, candidate: { ...base, overall: 0.8 }, digestOk: true, epochSame: true }).decision, 'PASS');
   // FAIL (regression)
   assert.equal(evaluateGate({ baseline: base, candidate: { overall: 0.8, correctness: 0.5, safety: 0.9, verification: 0.7 } }).decision, 'FAIL');
+  // FAIL (regression wins over minEffect even with negative gain)
+  assert.equal(evaluateGate({
+    baseline: base,
+    candidate: { overall: 0.4, correctness: 0.5, safety: 0.9, verification: 0.6 },
+    minEffect: 0.05,
+  }).decision, 'FAIL');
   // INCONCLUSIVE (gain <= minEffect)
   assert.equal(evaluateGate({ baseline: base, candidate: { ...base, overall: 0.62 }, minEffect: 0.05 }).decision, 'INCONCLUSIVE');
   // INVALID (digest mismatch)

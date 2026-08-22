@@ -1,0 +1,28 @@
+name: evaluate-preset-p2
+# P2 真实闭环: 评测变异后的 evaluate preset(候选 evaluate-5dab277e)。
+# wrapper 把候选 preset(agent.cordis.yml + preset.yml + README.md)复制进 child 的
+# .agent-presets 并合并进 overlay; 被测对象 = 变异后的评测 agent 本身。
+provider: clipa
+model: deepseek-v4-flash
+reasoningEffort: max
+profile: headless
+command: [node, E:\github\dsh-eval\eval\benchmarks\evaluate-preset-p2\wrapper.cjs, --preset-src, E:\github\dsh-eval\eval\benchmarks\evaluate-preset-p2, --preset-name, evaluate-p2, --provider, clipa, --model, deepseek-v4-flash, --reasoning-effort, max]
+trials: 1
+timeoutMs: 600000
+seed: 42
+cases:
+  - id: eval-real-session
+    prompt: |
+      Evaluate the DSH session log at ./sample-session.jsonl.zstd using the eval profile:
+      1. Import the session: `node E:\github\dsh\apps\cli\lib\bin.js --profile eval import dsh ./sample-session.jsonl.zstd --out eval-report.json --case-id sample-session`
+      2. Render the report: `node E:\github\dsh\apps\cli\lib\bin.js --profile eval report eval-report.json`
+      3. Write REPORT.md with the markdown metrics table (steps, tool calls, tool success, tokens, latency) and a Chinese conclusion.
+      IMPORTANT: REPORT.md MUST end with a "Failure clusters" section listing 2-5 actionable
+      failure groups with evidence references (failed tool call ids, invalid calls, token
+      anomalies), because this section feeds the evolution loop.
+      Do not modify check.js.
+    workspace: E:\github\dsh-eval\eval\benchmarks\evaluate-preset-p2
+    expected:
+      tool: read
+      check: node check.js
+

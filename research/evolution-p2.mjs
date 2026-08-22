@@ -197,8 +197,8 @@ async function finish() {
 
   section('近重复演示: 候选 = 历史 previous revision 的内容(回滚式重复)→ promote 被拒');
   const history = await registry.history(LOGICAL);
-  const previous = history.find((h) => h.status === 'previous');
-  if (!previous) {
+  const previous = history[history.length - 1]; // 最旧 previous(内容与 current 差异最大, 过 proposal-check)
+  if (!previous || previous.status !== 'previous') {
     console.log('(no previous revision in history — skip near-duplicate demo)');
   } else {
     const dupRun = await controller.newRun({
@@ -217,10 +217,13 @@ async function finish() {
       fs.writeFileSync(path.join(dupDir, name), text, 'utf8');
     }
     await controller.seal(dupRun.id);
+    // 给 dup 候选虚构的高分评测(gate 判定目标: 达到 ACCEPTED, 让 near-dup 检查成为最后一道防线)
     await controller.evaluate(dupRun.id, {
-      baseline, candidate: { ...candidate, overall: candidate.overall + 0.05 },
+      baseline: { overall: 0.5, correctness: 0.5, safety: 1.0, verification: 0.5 },
+      candidate: { overall: 0.9, correctness: 0.9, safety: 1.0, verification: 0.9 },
       gateOverrides: { minEffect: 0.05 },
     });
+    console.log('dup candidate state:', dupRun.state);
     try {
       await controller.promote(dupRun.id, { logicalId: LOGICAL, approvalId: 'neardup-demo' });
       console.log('✗ unexpected: near-duplicate promoted');
