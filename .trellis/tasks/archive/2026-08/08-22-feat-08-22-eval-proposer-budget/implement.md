@@ -33,11 +33,16 @@
 
 ## P2-4 真实闭环（AC5）
 
-- [ ] **P2-4a** 基于 current evaluate-8b9b3f03 做一轮：proposal-check 通过的有证据候选
-      （hypothesis+evidence 引用失败簇）→ seal → evaluate → promote（无 approvalId 先演示拒绝）。
-- [ ] **P2-4b** 近重复候选（内容与 current 相同）→ promote 被拒演示。
-- [ ] **P2-4c** budget 演示：spend 到 limit → newRun 被拒。
-- [ ] **P2-4d** 更新 evolution-plan.md 勾选 P2 + README/注释 absorbed-from。
+- [x] **P2-4a** 基于 current evaluate-8b9b3f03 做一轮: 变异(失败簇输出指令)→ proposal-check 通过
+      (hypothesis+evidence)→ seal evaluate-5dab277e → 真实评测(clipa)超时(65 步/83 工具调用全成功
+      但 590s>600s 预算)→ gate FAIL(regression in: correctness, verification)→ REJECTED,
+      current 不动(诚实拒绝, 无伪造提升)。**顺带修 gate 顺序 bug: 回归优先于 minEffect**。
+- [x] **P2-4b** 近重复候选(内容=最旧 previous evaluate-dab4f200)→ ACCEPTED 后 promote 被拒
+      (near-duplicate of evaluate-dab4f200)。
+- [x] **P2-4c** budget 演示: spend 到 limit(1 USD)→ newRun 被拒(evolution budget exhausted)。
+- [x] **P2-4d** evolution-plan.md 勾选 P2; README 增 Proposal/Budget/Near-dup 三节;
+      absorbed-from 注释内嵌(proposal-check←dsh-self-evolving; near-dup←dsh-continual-evolve;
+      budget←dsh-self-evolving)。
 
 ## 验证命令
 
