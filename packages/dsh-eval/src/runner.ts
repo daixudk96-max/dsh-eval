@@ -10,6 +10,13 @@
  * this child. Timeout kills the direct child and reports timed-out orthogonally
  * from its exit code; Windows descendants of a killed process may survive.
  *
+ * Fail-closed contract (absorbed from timwhitez/dsh-self-evolving's
+ * FAIL-CLOSED + infra-allowlist retry rules): a trial that produced no usable
+ * outcome is never counted as success. Missing session logs are `error`
+ * trials; a timed-out child or an unreadable/corrupt trace is `failed`; only
+ * infrastructure-class failures on the allowlist (rate limits, overload,
+ * connection resets) are retried, at most INFRA_MAX_ATTEMPTS spawns.
+ *
  * @module dsh-eval/runner
  */
 
@@ -18,7 +25,7 @@ import { cp, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { dump as serializeYaml } from 'js-yaml'
-import type { Benchmark, EvalRun, EvalTrialResult } from './types.ts'
+import type { Benchmark, BenchmarkSplit, EvalRun, EvalTrialResult } from './types.ts'
 import type { EvalGrade, EvalRunGrading } from './types.ts'
 import { tryJudgeTrial, type JudgeChat } from './judge.ts'
 import { aggregateMetrics, computeMetrics } from './metrics.ts'
@@ -26,6 +33,21 @@ import { findSessionLogs, loadTrace, mergeTraces } from './trace.ts'
 
 /** Cap per-stream child output so a runaway trial cannot exhaust memory. */
 const MAX_OUTPUT_BYTES = 512 * 1024
+
+/**
+ * Infrastructure failures worth retrying once the harness reports them in the
+ * child's stderr tail: transient model-provider conditions, never task
+ * outcomes. Anything else fails closed on the first attempt.
+ */
+const INFRA_RETRYABLE = ['RATE_LIMITED', 'OVERLOADED', 'CONNECTION_RESET'] as const
+
+/** Maximum spawn attempts per trial: the initial run plus two retries. */
+const INFRA_MAX_ATTEMPTS = 3
+
+/** Whether a child diagnostic text matches an allowlisted infra failure. */
+function isInfraRetryable(diagnosticText: string): boolean {
+  return INFRA_RETRYABLE.some(token => diagnosticText.includes(token))
+}
 
 /** Runtime overrides applied to a loaded benchmark. */
 export interface RunOptions {
@@ -35,6 +57,8 @@ export interface RunOptions {
   profile?: string
   /** Override the benchmark's trials per case. */
   trials?: number
+  /** Run only this case subset; omitted keeps every loaded case. */
+  split?: BenchmarkSplit
   /** Root for trial directories; defaults to the platform temp dir. */
   tempRoot?: string
   /** LLM-judge chat seam; required when the benchmark configures a judge. */
@@ -274,12 +298,16 @@ function runCommand(
 
 /**
  * Run one case x trial in its private temp directory and harvest its trace.
+ * Retries infra-class failures (see isInfraRetryable) up to INFRA_MAX_ATTEMPTS
+ * spawns; each retry gets a fresh trial directory so partial state never
+ * contaminates the next attempt.
  * @param benchmark - the loaded benchmark.
  * @param caseValue - the case to run.
  * @param trial - 1-based trial index.
  * @param root - this run's temp root.
  * @param options - runtime overrides (launcher, settings, credential bridge).
- * @returns the trial result; a failed subprocess with no log is an `error` trial.
+ * @returns the trial result; a failed subprocess with no log is an `error`
+ *   trial, a timeout or unreadable trace is `failed`.
  */
 async function runCaseTrial(
   benchmark: Benchmark,
@@ -288,8 +316,30 @@ async function runCaseTrial(
   root: string,
   options: RunOptions,
 ): Promise<EvalTrialResult> {
+  for (let attempt = 1; attempt <= INFRA_MAX_ATTEMPTS; attempt++) {
+    const result = await runCaseTrialOnce(benchmark, caseValue, trial, root, options, attempt)
+    const infraRetryable = result.status === 'error' && isInfraRetryable(result.error ?? '')
+    if (!infraRetryable || attempt >= INFRA_MAX_ATTEMPTS) return result
+  }
+  /* v8 ignore next 2 -- the loop always returns on its last attempt. */
+  throw new Error('unreachable')
+}
+
+/**
+ * One spawn attempt of a case x trial.
+ * @param attempt - 1-based attempt index; retries get a `-r<n>` directory suffix.
+ */
+async function runCaseTrialOnce(
+  benchmark: Benchmark,
+  caseValue: Benchmark['cases'][number],
+  trial: number,
+  root: string,
+  options: RunOptions,
+  attempt: number,
+): Promise<EvalTrialResult> {
   const judgeChat = options.judgeChat
-  const trialDir = join(root, `${sanitizeSegment(caseValue.id)}-${trial}`)
+  const retrySuffix = attempt > 1 ? `-r${attempt - 1}` : ''
+  const trialDir = join(root, `${sanitizeSegment(caseValue.id)}-${trial}${retrySuffix}`)
   const workspace = join(trialDir, 'workspace')
   const dshHome = join(trialDir, 'dsh-home')
   await mkdir(workspace, { recursive: true })
@@ -385,10 +435,13 @@ async function runCaseTrial(
     const judge = benchmark.judge === undefined || judgeChat === undefined
       ? undefined
       : await tryJudgeTrial(caseValue, trace, benchmark.judge, judgeChat)
+    // Fail-closed: a trace that exists but was cut short by the timeout is a
+    // failed trial, never a completed one — the task did not finish.
+    const status = outcome.timedOut ? 'failed' : 'completed'
     return {
       caseId: caseValue.id,
       trial,
-      status: 'completed',
+      status,
       tracePath: primaryPath,
       tracePaths: loaded.map(entry => entry.path),
       exitCode: outcome.exitCode,
@@ -401,7 +454,7 @@ async function runCaseTrial(
     return {
       caseId: caseValue.id,
       trial,
-      status: 'error',
+      status: 'failed',
       error: `failed to read trace: ${message(error)}`,
       exitCode: outcome.exitCode,
       timedOut: outcome.timedOut,
@@ -452,6 +505,7 @@ export async function runBenchmark(benchmark: Benchmark, options: RunOptions = {
     pricing: benchmark.pricing?.[benchmark.model] ?? null,
     ...(benchmark.judge !== undefined ? { judge: benchmark.judge } : {}),
     tempRoot: root,
+    split: options.split ?? 'dev',
     cases: results,
     aggregate: aggregateMetrics(completed.map(result => result.metrics)),
     grading: gradingOf(completed),

@@ -12,6 +12,7 @@ timeoutMs: 180000
 seed: 42
 cases:
   - id: fix-multiply
+    split: dev
     prompt: |
       Fix the bug in this small JavaScript project (see README.md).
       Requirements: fix src/multiply.js so multiply(a, b) returns a * b,

@@ -10,6 +10,7 @@
 import { Command } from 'commander'
 import type { Context } from '@deepseek-ai/cordis'
 import { parseCmdline } from '@deepseek-ai/dsh-cmdline'
+import type { BenchmarkSplit } from './types.ts'
 import type { ImportFormat } from './import.ts'
 
 /** What the eval app resolved from its command line. */
@@ -19,6 +20,7 @@ export type EvalStartupValues =
     benchmarkPath: string
     outPath: string
     trials?: number
+    split?: BenchmarkSplit
     dshCommand?: readonly string[]
     profile?: string
   }
@@ -43,6 +45,7 @@ export type EvalStartupValues =
 interface RunCommandOptions {
   out: string
   trials?: number
+  split?: BenchmarkSplit
   dsh?: string[]
   profile?: string
 }
@@ -79,6 +82,13 @@ export function evalCommand(publish: (values: EvalStartupValues) => void): Comma
       if (!Number.isInteger(parsed) || parsed <= 0) program.error('error: --trials must be a positive integer')
       return parsed
     })
+    .option('--split <dev|guard>', 'run only the dev or guard case subset (default dev)', (value) => {
+      if (value !== 'dev' && value !== 'guard') {
+        program.error('error: --split must be dev or guard')
+        return undefined
+      }
+      return value
+    })
     .option('--dsh <argv...>', 'override the dsh launcher argv (argv-safe, preserves quoting)')
     .option('--profile <name>', 'override the spawned dsh profile')
     .action((benchmarkPath: string, options: RunCommandOptions) => {
@@ -88,6 +98,7 @@ export function evalCommand(publish: (values: EvalStartupValues) => void): Comma
         benchmarkPath,
         outPath: options.out,
         ...(options.trials !== undefined ? { trials: options.trials } : {}),
+        ...(options.split !== undefined ? { split: options.split } : {}),
         ...(dshCommand !== undefined && dshCommand.length > 0 ? { dshCommand } : {}),
         ...(options.profile !== undefined ? { profile: options.profile } : {}),
       })

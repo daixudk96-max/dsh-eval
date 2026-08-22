@@ -1,8 +1,22 @@
-import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const mode = process.env.FAKE_DASH_MODE ?? 'log'
-if (mode === 'log' || mode === 'badlog') {
+// When FAKE_DASH_ATTEMPT_FILE is set, count every spawn in it (tests assert
+// retry counts). infra-once: fail the FIRST spawn with an allowlisted infra
+// error and behave like 'log' on retries.
+const attemptFile = process.env.FAKE_DASH_ATTEMPT_FILE
+let attemptCount = 0
+if (attemptFile !== undefined) {
+  attemptCount = existsSync(attemptFile) ? Number(readFileSync(attemptFile, 'utf8')) || 0 : 0
+  writeFileSync(attemptFile, String(attemptCount + 1))
+}
+const effectiveMode = mode === 'infra-once' && attemptCount > 0 ? 'log' : mode
+if (mode === 'infra-once' && attemptCount === 0) {
+  process.stderr.write('RATE_LIMITED\n')
+  process.exit(1)
+}
+if (effectiveMode === 'log' || effectiveMode === 'badlog' || effectiveMode === 'sleeplog') {
   const dir = join(process.env.DSH_HOME, 'sessions', 'project', 'session-1')
   mkdirSync(dir, { recursive: true })
   const target = join(dir, 'session.jsonl')
@@ -39,4 +53,4 @@ if (mode === 'output') {
   process.stdout.write(chunk)
   process.stderr.write(chunk)
 }
-if (mode === 'sleep') await new Promise(resolve => setTimeout(resolve, 10000))
+if (mode === 'sleep' || mode === 'sleeplog') await new Promise(resolve => setTimeout(resolve, 10000))

@@ -1,0 +1,81 @@
+{
+  "benchmark": "fix-multiply-short",
+  "model": "deepseek-v4-flash",
+  "provider": "clipa",
+  "reasoningEffort": "max",
+  "createdAt": 1787410543423,
+  "trials": 1,
+  "seed": 42,
+  "pricing": null,
+  "tempRoot": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-jFDJpe",
+  "split": "dev",
+  "cases": [
+    {
+      "caseId": "fix-multiply",
+      "trial": 1,
+      "status": "completed",
+      "tracePath": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-jFDJpe\\fix-multiply-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-jFDJpe-fix-multiply-1-workspace--\\session-b6f943eb-6b42-4d0c-83f1-946eac58ceb2\\session.jsonl",
+      "tracePaths": [
+        "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-jFDJpe\\fix-multiply-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-jFDJpe-fix-multiply-1-workspace--\\session-b6f943eb-6b42-4d0c-83f1-946eac58ceb2\\session.jsonl"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "metrics": {
+        "turns": 1,
+        "steps": 5,
+        "toolCalls": 7,
+        "toolResults": 7,
+        "toolSuccess": 7,
+        "toolSuccessRate": 1,
+        "invalidToolCalls": 0,
+        "retries": 0,
+        "tokens": {
+          "inputTokens": 7140,
+          "cacheReadTokens": 43008,
+          "cacheWriteTokens": 0,
+          "outputTokens": 878
+        },
+        "totalTokens": 51026,
+        "contextTokens": 50148,
+        "llmMs": 19059,
+        "toolMs": 964,
+        "ttftMs": 13598,
+        "latencyMs": 20633,
+        "costUsd": null
+      },
+      "grade": {
+        "taskSuccess": true,
+        "toolSelectionAccuracy": true
+      }
+    }
+  ],
+  "aggregate": {
+    "turns": 1,
+    "steps": 5,
+    "toolCalls": 7,
+    "toolResults": 7,
+    "toolSuccess": 7,
+    "toolSuccessRate": 1,
+    "invalidToolCalls": 0,
+    "retries": 0,
+    "tokens": {
+      "inputTokens": 7140,
+      "cacheReadTokens": 43008,
+      "cacheWriteTokens": 0,
+      "outputTokens": 878
+    },
+    "totalTokens": 51026,
+    "contextTokens": 50148,
+    "llmMs": 19059,
+    "toolMs": 964,
+    "ttftMs": 13598,
+    "latencyMs": 20633,
+    "costUsd": null
+  },
+  "grading": {
+    "taskSuccessRate": 1,
+    "toolSelectionAccuracyRate": 1,
+    "finalAnswerScore": null,
+    "hallucinationRate": null
+  }
+}

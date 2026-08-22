@@ -127,7 +127,7 @@ export async function executeEval(
       io.stdout.write(renderCompareMarkdown(compareRuns(a, b)))
       return 0
     }
-    const benchmark = await loadBenchmark(values.benchmarkPath)
+    const benchmark = await loadBenchmark(values.benchmarkPath, {}, values.split)
     // Resolve the effective launcher: CLI override > benchmark command >
     // current running DSH CLI (argv default, no PATH dependency).
     const launcher = resolveLauncher(values.dshCommand, benchmark.command, services.processRef ?? process)
@@ -137,6 +137,7 @@ export async function executeEval(
     }
     const runOptions: {
       trials?: number
+      split?: 'dev' | 'guard'
       profile?: string
       judgeChat?: JudgeChat
       selection?: { provider: string; model: string; reasoningEffort?: string }
@@ -145,6 +146,7 @@ export async function executeEval(
       resolveCredential?: () => Promise<string | undefined>
     } = {
       ...(values.trials !== undefined ? { trials: values.trials } : {}),
+      ...(values.split !== undefined ? { split: values.split } : {}),
       ...(values.profile !== undefined ? { profile: values.profile } : {}),
       ...(services.judgeChat !== undefined ? { judgeChat: services.judgeChat } : {}),
     }

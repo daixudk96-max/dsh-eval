@@ -66,9 +66,21 @@ pricing:
 | `seed` | `0` | Reserved for future deterministic paired comparisons. |
 | `cases[].id` | required | Stable case id. |
 | `cases[].prompt` / `cases[].promptFile` | exactly one | Task text, inline or relative to the benchmark file. |
+| `cases[].split` | `dev` | Split membership: `dev` (visible to candidate-triggered runs) or `guard` (hidden until explicitly requested via `--split guard`). |
 | `cases[].workspace` | absent | Workspace tree copied into each trial, relative or absolute. |
 | `cases[].expected` | absent | Scripted grading: `tool` is a substring matched against recorded tool-call names; `check` is a command run in the trial workspace after the agent exits (exit 0 = task success). At least one is required when present. |
 | `pricing` | absent | Per-million-token USD prices keyed by model id; absent models report `costUsd: null`. |
+
+### Running subsets (`--split`)
+
+`run` accepts `--split <dev|guard>` (default `dev`) to execute only one case
+subset; the run record carries the executed subset in its top-level `split`
+field. A filter matching no case fails loudly instead of producing an empty
+run, so a guard-only benchmark cannot silently run nothing.
+
+```sh
+dsh --profile eval run benchmark.yaml --split guard --out run-guard.json
+```
 
 ### Judge
 
@@ -107,7 +119,16 @@ hallucination rate.
 
 ## Run report
 
-`dsh eval run --out run.json` writes one JSON document per run: benchmark and model identity, per-trial outcomes with absolute trace paths, aggregate metrics (means for counts and wall times, pooled success rate), and pooled grading rates. `dsh eval report run.json` renders the run as markdown. Trial workspaces and traces stay under the run's `tempRoot` (a private temp directory) and are not deleted; remove them when the run is no longer needed.
+`dsh eval run --out run.json` writes one JSON document per run: benchmark and model identity, the executed `split` subset (when run with `--split`), per-trial outcomes with absolute trace paths, aggregate metrics (means for counts and wall times, pooled success rate), and pooled grading rates. `dsh eval report run.json` renders the run as markdown. Trial workspaces and traces stay under the run's `tempRoot` (a private temp directory) and are not deleted; remove them when the run is no longer needed.
+
+### Fail-closed trial outcomes
+
+A trial that produced no usable outcome is never counted as success:
+
+- `error` — the child never produced a session log (launch failure, missing log, or missing replay fixture);
+- `failed` — the child timed out after writing a trace, or the harvested trace was corrupt/unreadable.
+
+Only allowlisted infrastructure failures (`RATE_LIMITED`, `OVERLOADED`, `CONNECTION_RESET` reported by the child) are retried, at most three spawn attempts per trial; every other failure fails closed on the first attempt. Failed and error trials are excluded from aggregate metrics and grading.
 
 ## Comparison
 

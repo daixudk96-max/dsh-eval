@@ -1,0 +1,37 @@
+# split-demo benchmark: dev/guard 双集真实样例（P1）
+# dev 集与 guard 集各 1 个真实 case（同为 fix-multiply 确定性任务，
+# 已验证真实可跑通；guard 语义 = 默认隐藏，须 --split guard 显式运行）。
+# 运行：dsh --profile eval run eval\benchmarks\split-demo-benchmark.yaml --split <dev|guard> --out run-<split>.json
+# 概念吸收：timwhitez/dsh-self-evolving split（dev-observed / guard-sealed），
+# 落地为 dsh-eval 的 cases[].split 字段 + --split 过滤。
+
+name: split-demo
+model: deepseek-v4-flash
+provider: clipa
+profile: headless
+trials: 1
+timeoutMs: 300000
+seed: 42
+cases:
+  - id: fix-multiply-dev
+    split: dev
+    prompt: |
+      Fix the bug in this small JavaScript project (see README.md).
+      Requirements: fix src/multiply.js so multiply(a, b) returns a * b,
+      run `node tests/run.js` until it prints PASS, and write ANSWER.md
+      with a short explanation. Do not modify check.js or tests/run.js.
+    workspace: E:\github\dsh-eval\eval\benchmarks\fix-multiply
+    expected:
+      tool: read
+      check: node check.js
+  - id: fix-multiply-guard
+    split: guard
+    prompt: |
+      Fix the bug in this small JavaScript project (see README.md).
+      Requirements: fix src/multiply.js so multiply(a, b) returns a * b,
+      run `node tests/run.js` until it prints PASS, and write ANSWER.md
+      with a short explanation. Do not modify check.js or tests/run.js.
+    workspace: E:\github\dsh-eval\eval\benchmarks\fix-multiply
+    expected:
+      tool: read
+      check: node check.js

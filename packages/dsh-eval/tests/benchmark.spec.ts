@@ -223,4 +223,79 @@ describe('dsh-eval benchmark loading', () => {
   it('rejects a missing benchmark file', async () => {
     await expect(loadBenchmark(join(tempDir(), 'missing.yml'))).rejects.toThrow()
   })
+
+  it('defaults every case to the dev split', async () => {
+    const benchmark = await parseBenchmark([
+      'name: split-default',
+      'model: m',
+      'cases:',
+      '  - id: a',
+      '    prompt: p',
+      '',
+    ].join('\n'), tempDir())
+    expect(benchmark.cases[0]?.split).toBeUndefined() // dev is the omitted default
+  })
+
+  it('keeps explicit guard cases and filters by split', async () => {
+    const dir = tempDir()
+    const document = [
+      'name: split-doc',
+      'model: m',
+      'cases:',
+      '  - id: dev-case',
+      '    prompt: p1',
+      '  - id: guard-case',
+      '    prompt: p2',
+      '    split: guard',
+      '',
+    ].join('\n')
+    const all = await parseBenchmark(document, dir)
+    expect(all.cases).toHaveLength(2)
+    expect(all.cases[0]).toMatchObject({ id: 'dev-case' })
+    expect(all.cases[1]).toMatchObject({ id: 'guard-case', split: 'guard' })
+    const dev = await parseBenchmark(document, dir, {}, 'dev')
+    expect(dev.cases.map(caseValue => caseValue.id)).toEqual(['dev-case'])
+    const guard = await parseBenchmark(document, dir, {}, 'guard')
+    expect(guard.cases.map(caseValue => caseValue.id)).toEqual(['guard-case'])
+  })
+
+  it('rejects a split filter that matches no case', async () => {
+    await expect(parseBenchmark([
+      'name: split-empty',
+      'model: m',
+      'cases:',
+      '  - id: dev-only',
+      '    prompt: p',
+      '',
+    ].join('\n'), tempDir(), {}, 'guard')).rejects.toThrow('no cases in split "guard"')
+  })
+
+  it('rejects an invalid split value', async () => {
+    await expect(parseBenchmark([
+      'name: split-bad',
+      'model: m',
+      'cases:',
+      '  - id: a',
+      '    prompt: p',
+      '    split: staging',
+      '',
+    ].join('\n'), tempDir())).rejects.toThrow()
+  })
+
+  it('filters via loadBenchmark with the same semantics', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'split.yml'), [
+      'name: split-file',
+      'model: m',
+      'cases:',
+      '  - id: dev-case',
+      '    prompt: p1',
+      '  - id: guard-case',
+      '    prompt: p2',
+      '    split: guard',
+      '',
+    ].join('\n'))
+    const guard = await loadBenchmark(join(dir, 'split.yml'), {}, 'guard')
+    expect(guard.cases.map(caseValue => caseValue.id)).toEqual(['guard-case'])
+  })
 })

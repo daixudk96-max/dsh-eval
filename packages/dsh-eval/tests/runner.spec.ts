@@ -117,11 +117,12 @@ describe('dsh-eval benchmark runner', () => {
     expect(run.cases[0]?.error).toContain('no session log found')
   })
 
-  it('reports a corrupt trace as an error trial', async () => {
+  it('reports a corrupt trace as a failed trial', async () => {
     process.env.FAKE_DASH_MODE = 'badlog'
     const run = await runBenchmark(buildBenchmark({ trials: 1 }), { tempRoot: tempDir() })
-    expect(run.cases[0]?.status).toBe('error')
+    expect(run.cases[0]?.status).toBe('failed')
     expect(run.cases[0]?.error).toContain('failed to read trace')
+    expect(run.aggregate).toBeNull()
   })
 
   it('kills a timed-out trial and reports it orthogonally', async () => {
@@ -129,6 +130,45 @@ describe('dsh-eval benchmark runner', () => {
     const run = await runBenchmark(buildBenchmark({ trials: 1, timeoutMs: 300 }), { tempRoot: tempDir() })
     expect(run.cases[0]).toMatchObject({ status: 'error', timedOut: true, exitCode: null })
     expect(run.cases[0]?.error).toContain('timed out')
+  })
+
+  it('marks a timed-out trial with a harvested trace as failed', async () => {
+    // The child wrote a session log before the timeout killed it: the trace
+    // exists, but the task did not finish, so the trial must not count as
+    // completed (fail-closed).
+    process.env.FAKE_DASH_MODE = 'sleeplog'
+    process.env.FAKE_DASH_LOG = FIXTURE_LOG
+    const run = await runBenchmark(buildBenchmark({ trials: 1, timeoutMs: 300 }), { tempRoot: tempDir() })
+    expect(run.cases[0]).toMatchObject({ status: 'failed', timedOut: true, exitCode: null })
+    expect(run.cases[0]?.tracePath).toBeTruthy()
+    expect(run.cases[0]?.metrics?.steps).toBe(1)
+    expect(run.aggregate).toBeNull()
+  })
+
+  it('retries allowlisted infra failures up to the attempt cap', async () => {
+    // First spawn fails with RATE_LIMITED and no log; the retry succeeds.
+    const attemptFile = join(tempDir(), 'attempts')
+    process.env.FAKE_DASH_MODE = 'infra-once'
+    process.env.FAKE_DASH_LOG = FIXTURE_LOG
+    process.env.FAKE_DASH_ATTEMPT_FILE = attemptFile
+    const run = await runBenchmark(buildBenchmark({ trials: 1 }), { tempRoot: tempDir() })
+    expect(readFileSync(attemptFile, 'utf8')).toBe('2')
+    expect(run.cases[0]?.status).toBe('completed')
+    expect(run.cases[0]?.exitCode).toBe(0)
+    // Unset so later tests' children do not inherit a stale attempt path
+    // (their temp dirs are deleted after each test).
+    delete process.env.FAKE_DASH_ATTEMPT_FILE
+  })
+
+  it('does not retry non-infra failures', async () => {
+    const attemptFile = join(tempDir(), 'attempts.txt')
+    process.env.FAKE_DASH_MODE = 'stderr'
+    process.env.FAKE_DASH_ATTEMPT_FILE = attemptFile
+    const run = await runBenchmark(buildBenchmark({ trials: 1 }), { tempRoot: tempDir() })
+    expect(readFileSync(attemptFile, 'utf8')).toBe('1')
+    expect(run.cases[0]?.status).toBe('error')
+    expect(run.cases[0]?.error).toContain('fake dsh exploded')
+    delete process.env.FAKE_DASH_ATTEMPT_FILE
   })
 
   it('turns a spawn failure into an error trial', async () => {

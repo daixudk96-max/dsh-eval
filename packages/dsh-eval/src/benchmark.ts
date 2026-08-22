@@ -6,6 +6,10 @@
  * (`judge.rubricCipher`, see lib/rubric) — the envelope is decrypted here at
  * load time, so the rest of the pipeline only ever sees plaintext.
  *
+ * Each case may declare a `split` target (`dev` or `guard`, default `dev`):
+ * guard cases are hidden from candidate-triggered runs and evaluated only on
+ * demand (see the split-filter parameter of parseBenchmark/loadBenchmark).
+ *
  * @module dsh-eval/benchmark
  */
 
@@ -14,7 +18,7 @@ import { dirname, isAbsolute, resolve } from 'node:path'
 import { load } from 'js-yaml'
 import { z } from 'zod'
 import { decryptRubric, resolveRubricKey, type RubricKeyOptions } from './rubric.ts'
-import type { Benchmark, BenchmarkCase } from './types.ts'
+import type { Benchmark, BenchmarkCase, BenchmarkSplit } from './types.ts'
 
 const judgeSchema = z.object({
   provider: z.string().min(1).optional(),
@@ -43,6 +47,7 @@ const benchmarkCaseSchema = z.object({
   id: z.string().min(1),
   prompt: z.string().min(1).optional(),
   promptFile: z.string().min(1).optional(),
+  split: z.enum(['dev', 'guard']).default('dev'),
   workspace: z.string().min(1).optional(),
   expected: z.object({
     tool: z.string().min(1).optional(),
@@ -89,6 +94,7 @@ async function resolveCase(
   return {
     id: parsed.id,
     prompt,
+    ...(parsed.split !== undefined && parsed.split !== 'dev' ? { split: parsed.split } : {}),
     ...(parsed.workspace !== undefined
       ? { workspace: isAbsolute(parsed.workspace) ? parsed.workspace : resolve(baseDir, parsed.workspace) }
       : {}),
@@ -108,9 +114,17 @@ async function resolveCase(
  * @param text - the benchmark document's YAML source.
  * @param baseDir - absolute directory used to resolve prompt and workspace paths.
  * @param opts - optional rubric key resolution overrides (see RubricKeyOptions).
+ * @param splitFilter - when given, keep only cases whose `split` equals this
+ *   value; omitted keeps every case. Guard cases are hidden unless explicitly
+ *   requested, so candidate runs never see them by accident.
  * @returns the validated benchmark; an encrypted judge rubric is decrypted to plaintext.
  */
-export async function parseBenchmark(text: string, baseDir: string, opts: RubricKeyOptions = {}): Promise<Benchmark> {
+export async function parseBenchmark(
+  text: string,
+  baseDir: string,
+  opts: RubricKeyOptions = {},
+  splitFilter?: BenchmarkSplit,
+): Promise<Benchmark> {
   const value = load(text)
   if (typeof value !== 'object' || value === null) {
     throw new Error('benchmark document must be a YAML mapping')
@@ -118,7 +132,11 @@ export async function parseBenchmark(text: string, baseDir: string, opts: Rubric
   const parsed = benchmarkSchema.parse(value)
   const cases: BenchmarkCase[] = []
   for (const caseValue of parsed.cases) {
+    if (splitFilter !== undefined && caseValue.split !== splitFilter) continue
     cases.push(await resolveCase(caseValue, baseDir))
+  }
+  if (splitFilter !== undefined && cases.length === 0) {
+    throw new Error(`benchmark has no cases in split "${splitFilter}"`)
   }
   const pricing = parsed.pricing
   let judge = parsed.judge
@@ -159,9 +177,14 @@ export async function parseBenchmark(text: string, baseDir: string, opts: Rubric
  * Load and validate a benchmark document from disk.
  * @param path - path to the benchmark YAML file.
  * @param opts - optional rubric key resolution overrides (see RubricKeyOptions).
+ * @param splitFilter - when given, keep only cases whose `split` equals this value.
  * @returns the validated benchmark.
  */
-export async function loadBenchmark(path: string, opts: RubricKeyOptions = {}): Promise<Benchmark> {
+export async function loadBenchmark(
+  path: string,
+  opts: RubricKeyOptions = {},
+  splitFilter?: BenchmarkSplit,
+): Promise<Benchmark> {
   const absolute = resolve(path)
-  return parseBenchmark(await readFile(absolute, 'utf8'), dirname(absolute), opts)
+  return parseBenchmark(await readFile(absolute, 'utf8'), dirname(absolute), opts, splitFilter)
 }

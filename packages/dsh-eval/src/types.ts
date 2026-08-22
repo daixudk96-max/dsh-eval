@@ -20,12 +20,17 @@ export interface BenchmarkPricing {
   outputUsdPerMTokens: number
 }
 
-/** One benchmark task: a prompt and an optional workspace copied per trial. */
+/** Split membership of a benchmark case: `dev` or `guard`. */
+export type BenchmarkSplit = 'dev' | 'guard'
+
+/** One benchmark case: a case and an optional workspace copied per trial. */
 export interface BenchmarkCase {
   /** Stable case id, used in run output and trial directory names. */
   id: string
   /** The task text handed to the headless agent. */
   prompt: string
+  /** Split target this case belongs to; defaults to `dev` (see BenchmarkSplit). */
+  split?: BenchmarkSplit
   /** Absolute path to a workspace tree copied into each trial, when provided. */
   workspace?: string
   /** Scripted grading annotations, when the case is graded. */
@@ -166,8 +171,8 @@ export interface EvalTrialResult {
   caseId: string
   /** 1-based trial index. */
   trial: number
-  /** `completed` when a persisted trace was harvested; `error` otherwise. */
-  status: 'completed' | 'error'
+  /** `completed` when a persisted trace was harvested and graded; `failed` when the trial ran but produced no usable outcome (timeout with a trace, corrupt trace); `error` when the child never produced a session log or the launch failed. */
+  status: 'completed' | 'error' | 'failed'
   /** Human-readable failure detail for `error` trials. */
   error?: string
   /** Absolute path of the harvested primary session log. */
@@ -238,6 +243,8 @@ export interface EvalRun {
   judge?: BenchmarkJudge
   /** Root holding every trial's workspace, overlay, and harvested trace. */
   tempRoot: string
+  /** The split subset this run executed (`dev` or `guard`); present on benchmark runs, absent on imports. */
+  split?: BenchmarkSplit
   /** Per-trial outcomes in execution order. */
   cases: readonly EvalTrialResult[]
   /** Mean/pooled metrics over completed trials, or null when none completed. */
