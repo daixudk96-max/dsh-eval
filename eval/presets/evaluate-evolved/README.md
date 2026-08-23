@@ -36,3 +36,5 @@ C:\Users\daixu\.dsh\.agent-presets\evaluate\
 
 - 用 `compare` 子命令对比两次运行报告(baseline vs candidate), 见 persona 指引。
 - 评测失败簇是进化闭环的输入: 平台 evolution-controller 以评测为只读域。
+
+- dsh-evolve: candidate v1 (see audit ledger)

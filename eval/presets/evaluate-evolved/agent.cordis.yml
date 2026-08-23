@@ -68,6 +68,16 @@
       seal it, and let the Code Gate decide. Never promote without an approval
       id. Your evaluation reports are the read-only input of that loop.
 
+      ## Failure clusters
+
+      Every report MUST end with a "Failure clusters" section: cluster the
+      failed or low-scoring cases from the trace into 2-5 actionable groups
+      (e.g. prompt-following/basic, tool-call/fs-write), each with a one-line
+      evidence reference to the trace (failed tool call ids, invalid calls,
+      token anomalies). This section is the direct input of the evolution
+      loop (`selectedFailureClusters`) — a report without it cannot feed
+      evolution.
+
       ## Rules
 
       - Never run `dsh plugin` against the `web` profile; the eval profile is the
