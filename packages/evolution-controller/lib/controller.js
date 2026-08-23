@@ -5,6 +5,7 @@ const { evaluateGate } = require('./gate');
 const { proposalCheck, normalizeFiles } = require('./proposal-check');
 const { BudgetLedger } = require('./budget');
 const { nearDuplicate, contentHash } = require('./near-dup');
+const { redactReviewText } = require('./redact');
 
 /**
  * EvolutionController — deterministic governance core.
@@ -24,14 +25,22 @@ class EvolutionController {
    * @param {string} opts.auditDir append-only audit ledger directory
    * @param {object} [opts.gateDefaults] default minEffect/tolerance
    * @param {object} [opts.budget] { dir, limitUsd } budget ledger config; omitted = unlimited
+   * @param {string[]} [opts.redactValues] known credential values masked from
+   *   hypothesis/evidence before they reach the audit ledger (default none).
    */
-  constructor({ registry, auditDir, gateDefaults = {}, budget }) {
+  constructor({ registry, auditDir, gateDefaults = {}, budget, redactValues = [] }) {
     if (!registry) throw new Error('registry is required');
     this.registry = registry;
     this.auditDir = auditDir;
     this.gateDefaults = gateDefaults;
     this.budget = budget ? new BudgetLedger(budget) : null;
+    this.redactValues = redactValues;
     this.runs = new Map();
+  }
+
+  /** Redact review text with this controller's known credential values. */
+  _redact(text) {
+    return redactReviewText(text, { values: this.redactValues });
   }
 
   async _audit(entry) {
@@ -107,11 +116,15 @@ class EvolutionController {
     for (const m of mutations) await this.registry.patchCandidate(candidateId, m);
     run.candidateId = candidateId;
     run.mutations = mutations;
-    run.hypothesis = hypothesis;
-    run.evidence = evidence;
+    // Redact hypothesis/evidence before they are stored on the run or written
+    // to the audit ledger (failure evidence may carry credentials/paths).
+    run.hypothesis = this._redact(String(hypothesis ?? ''));
+    run.evidence = evidence.map((e) => this._redact(String(e ?? '')));
     if (!run.candidates) run.candidates = [];
-    run.candidates.push({ candidateId, hypothesis, contentHash: contentHash(candidateFiles) });
-    await this._audit({ runId, event: 'candidate-created', candidateId, hypothesis, evidence: evidence.length });
+    run.candidates.push({ candidateId, hypothesis: run.hypothesis, contentHash: contentHash(candidateFiles) });
+    await this._audit({
+      runId, event: 'candidate-created', candidateId, hypothesis: run.hypothesis, evidence: run.evidence.length,
+    });
     return candidateId;
   }
 
