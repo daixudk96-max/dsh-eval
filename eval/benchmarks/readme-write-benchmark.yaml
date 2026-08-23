@@ -1,0 +1,25 @@
+# readme-write benchmark (guard split)
+# Documentation task with a strict grading check: README.md must mention
+# multiply, contain a usage example, and cover error handling. A generic
+# README gets a real CHECK_FAIL — evidence for the evolution proposer.
+name: readme-write-guard
+model: deepseek-v4-flash
+provider: clipa
+profile: headless
+trials: 1
+timeoutMs: 180000
+seed: 42
+cases:
+  - id: readme-calc
+    split: guard
+    prompt: |
+        Read the project in this workspace (see TASK.md). Requirements:
+        write README.md documenting src/calc.js — one-line description,
+        usage example (import { multiply } from './src/calc.js'), and an
+        error-handling note. The grading check requires the words
+        multiply, a usage example, and error handling; a generic README
+        fails.
+    workspace: E:\github\dsh-eval\eval\benchmarks\fixtures\readme-me
+    expected:
+      tool: read
+      check: node check.js

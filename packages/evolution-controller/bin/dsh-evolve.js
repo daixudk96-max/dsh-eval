@@ -39,9 +39,11 @@ function parseArgs(argv) {
       args[tok.slice(2, eq)] = tok.slice(eq + 1);
       continue;
     }
-    if (tok.startsWith('--') && i + 1 < argv.length) {
+    if (tok.startsWith('--') && i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
       args[tok.slice(2)] = argv[i + 1];
       i += 1;
+    } else if (tok.startsWith('--')) {
+      args[tok.slice(2)] = true; // 无值 flag
     }
   }
   return args;
@@ -62,6 +64,10 @@ function usage() {
   --registry <root>      必填: preset-registry 根
   --logical <id>         必填: logical preset id
   --candidate <dir>      可选: 候选内容目录(变异后文件); 缺省 = 读 current 内容
+  --auto                 可选: LLM proposer 自动生成候选(读失败证据)
+  --proposal-run <json>  可选(--auto 时): 用历史真实失败 run.json 作证据(默认=本次 baseline)
+  --model <id>           可选: proposer LLM 模型(默认 deepseek-v4-flash)
+  --api-key-env <name>   可选: proposer 凭证 env/credentials 名(默认 CLIPA_API_KEY)
   --split <dev|guard>    默认 dev
   --approve <approvalId> 可选: 人审绑定; 缺省 = 演示拒绝
   --min-effect <n>       默认 0.05
@@ -147,11 +153,45 @@ async function main() {
   const { files: currentContent, current } = await currentFiles(registry, logicalId);
   console.log(`▶ current: ${current.revisionId} (digest ${current.digest.slice(0, 12)}…)`);
 
-  // 2. 候选内容
+  // 2. 评测 baseline(先跑: --auto 需要失败证据; 手动模式同序)
+  const benchmarkBaseline = path.resolve(args['benchmark-baseline'] ?? args.benchmark);
+  const benchmarkCandidate = path.resolve(args['benchmark-candidate'] ?? args.benchmark);
+  console.log(`▶ evaluate] baseline run (split=${split}) …`);
+  const baselineRun = await runBenchmark({ dshLauncher, benchmarkPath: benchmarkBaseline, split, outPath: path.join(outDir, 'baseline.json') });
+  const baseline = evalEvidence(baselineRun);
+  console.log(`baseline: ${JSON.stringify(baseline)}`);
+
+  // 3. 候选内容: --candidate 目录 | --auto proposer | 缺省占位变异
   let candidateFiles;
+  let hypothesis = 'dsh-evolve CLI run: mutate preset content and verify via real benchmark';
+  let evidence = [`baseline ${current.revisionId} → candidate`];
+  let mutations = [{ kind: 'replace', path: '(candidate dir)', op: 'sync' }];
   if (args.candidate) {
     candidateFiles = readDirAsFiles(path.resolve(args.candidate));
     console.log(`▶ candidate: ${Object.keys(candidateFiles).length} files from ${args.candidate}`);
+  } else if (args.auto) {
+    const { propose } = require('../lib/proposer.js');
+    const { createChatClient } = require('../lib/llm-client.js');
+    const llm = createChatClient({ apiKeyEnv: args['api-key-env'] ?? 'CLIPA_API_KEY', model: args.model ?? 'deepseek-v4-flash' });
+    // 失败证据来源: --proposal-run <run.json>(历史真实失败记录, growing-archive
+    // 思路)优先; 否则用刚跑的 baseline run(若其有失败 case)。
+    let proposalRun = baselineRun;
+    if (args['proposal-run']) {
+      proposalRun = JSON.parse(fs.readFileSync(path.resolve(args['proposal-run']), 'utf8'));
+      console.log(`▶ proposer: 失败证据来自 ${args['proposal-run']}(历史真实失败)`);
+    }
+    console.log(`▶ proposer: LLM 读失败证据生成候选 …`);
+    const proposal = await propose({
+      runJson: proposalRun, baselineFiles: currentContent, logicalId,
+      llm, redactValues: [args['redact-value']].filter(Boolean),
+    });
+    if (!proposal.ok) { console.error(`✗ proposer 拒绝: ${proposal.reason}`); process.exit(1); }
+    candidateFiles = proposal.candidateFiles;
+    hypothesis = proposal.hypothesis;
+    evidence = proposal.evidence;
+    mutations = proposal.mutations;
+    fs.writeFileSync(path.join(outDir, 'proposal.json'), JSON.stringify(proposal, null, 2), 'utf8');
+    console.log(`▶ proposer: ${Object.keys(candidateFiles).length} 文件变异 — ${hypothesis}`);
   } else {
     candidateFiles = { ...currentContent };
     // 占位变异: 在 persona 追加真实文本行(非注释, 归一化后有真实差异, 不伪造成绩)
@@ -160,13 +200,11 @@ async function main() {
     console.log('▶ candidate: no --candidate, appended marker line to', readmeKey);
   }
 
-  // 3. 进化域: newRun → createCandidate → seal
+  // 4. 进化域: newRun → createCandidate → seal
   const run = await controller.newRun({ source: logicalId, triggerEvaluationRunId: 'dsh-evolve-cli', selectedFailureClusters: [] });
   const candidateId = await controller.createCandidate(run.id, {
     logicalId, sourceRevisionId: current.revisionId,
-    hypothesis: 'dsh-evolve CLI run: mutate preset content and verify via real benchmark',
-    evidence: [`baseline ${current.revisionId} → candidate`],
-    mutations: [{ kind: 'replace', path: '(candidate dir)', op: 'sync' }],
+    hypothesis, evidence, mutations,
     readCandidateFiles: async () => candidateFiles,
   });
   const stagingDir = path.join(registry.dirs.staging, candidateId);
@@ -178,17 +216,11 @@ async function main() {
   const sealed = await controller.seal(run.id);
   console.log(`▶ sealed] ${sealed.revisionId} (digest ${sealed.digest.slice(0, 12)}…)`);
 
-  // 4. 评测×2 — 同一 benchmark 或分别指定(wrapper 可注入不同被测内容)
-  const benchmarkBaseline = path.resolve(args['benchmark-baseline'] ?? args.benchmark);
-  const benchmarkCandidate = path.resolve(args['benchmark-candidate'] ?? args.benchmark);
-  console.log(`▶ evaluate] baseline run (split=${split}) …`);
-  const baselineRun = await runBenchmark({ dshLauncher, benchmarkPath: benchmarkBaseline, split, outPath: path.join(outDir, 'baseline.json') });
+  // 5. 评测 candidate
   console.log(`▶ evaluate] candidate run (split=${split})`);
   const candidateRun = await runBenchmark({ dshLauncher, benchmarkPath: benchmarkCandidate, split, outPath: path.join(outDir, 'candidate.json') });
 
-  const baseline = evalEvidence(baselineRun);
   const candidate = evalEvidence(candidateRun);
-  console.log(`baseline: ${JSON.stringify(baseline)}`);
   console.log(`candidate: ${JSON.stringify(candidate)}`);
 
   // 5. Code Gate

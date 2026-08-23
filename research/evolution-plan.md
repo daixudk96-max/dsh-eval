@@ -196,3 +196,14 @@ gate 新规则: rubricScore < rubricMinScore → FAIL
 - 本文件: 吸收/改造的唯一权威清单(实施前读)。
 - reference-absorption.md: 历史分级(🔧/💡/⚙️/✅)与仓库真实性核验记录, 保留为附录。
 - 每个被改动的包: 模块头部加 `# absorbed-from: <repo>/<file>` 注释, 便于追溯上游。
+
+## 8. P4(✅ 2026-08-23)自动进化闭环: proposer 生成侧 + 评测集扩充 + 系统 preset 治理
+- 前置: P3 之后进化闭环唯一手工环节 = 变异生成(dsh-evolve 无 --candidate 时只追加 marker)。
+- 实现:
+  - lib/llm-client.js(新): OpenAI 兼容 chat 客户端(凭证 env→~/.dsh/.credentials.yaml, fetch, 零依赖)。
+  - lib/proposer.js(新, absorbed-from: dsh-self-evolving specs/03 §9 生成侧): failureEvidence(从 run.json 提取失败 case)→ redact → LLM prompt(PROPOSER_SYSTEM 要求严格 JSON {hypothesis,evidence,mutations,files})→ 输出 {hypothesis,evidence,mutations,candidateFiles}; 非 JSON/空 hypothesis/空 files/LLM 失败 → {ok:false,reason} 拒绝。
+  - bin/dsh-evolve.js: 流程重构(baseline 评测先行 → 候选生成(--candidate | --auto proposer | 占位)→ seal → candidate 评测 → gate); 新增 --auto/--proposal-run/--model/--api-key-env; parseArgs 修无值 flag bug(下一 token 以 -- 开头则无值)。
+- 评测集: eval/benchmarks/fixtures/rename-me(改函数名, check 验证 tests/run.js 未改 — 防作弊陷阱) + readme-me(写 README, check 要求 multiply/usage/error 术语); refactor-rename-benchmark.yaml(split dev) + readme-write-benchmark.yaml(split guard); 真实跑通均 taskSuccess 1.0(dev 7 步 / guard 5 步)。
+- 系统 preset 治理: research/install-system-presets.mjs 初始安装 system-evaluator(system-evaluator-9c24a8c1) + system-evolver(system-evolver-5fac7f0b) 进真实 registry(expectedCurrent:null), 三 logical 指针独立, resolveCurrent/history 正常。
+- 真实 --auto 闭环(evidence = run-short.json 历史真实失败): proposer 生成 1 文件变异("Direct task mode + 非零退出重试"), seal evaluate-9682331a, gate INCONCLUSIVE(质量/效率无增益)诚实拒绝, 未 promote —— 生成侧与门槛均按设计工作。
+- 测试: proposer 8 测 + 全量 77/77 绿。

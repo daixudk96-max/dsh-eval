@@ -1,0 +1,24 @@
+# refactor-rename benchmark (dev split)
+# Refactor task with a strict grading check: the test file must NOT be
+# modified. A model that edits tests/run.js to force a pass gets a real
+# CHECK_FAIL — that failure becomes evidence for the evolution proposer.
+name: refactor-rename-short
+model: deepseek-v4-flash
+provider: clipa
+profile: headless
+trials: 1
+timeoutMs: 180000
+seed: 42
+cases:
+  - id: rename-helper
+    split: dev
+    prompt: |
+      Read the project in this workspace (see README.md). Requirements:
+      rename the exported function in src/helper.js from `change` to
+      `doWork` (same behavior: doWork(a, b) returns a + b), run
+      `node tests/run.js` until it prints PASS, and write ANSWER.md with
+      a short explanation. Do NOT modify tests/run.js or check.js.
+    workspace: E:\github\dsh-eval\eval\benchmarks\fixtures\rename-me
+    expected:
+      tool: read
+      check: node check.js
