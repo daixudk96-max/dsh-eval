@@ -31,3 +31,20 @@
   - resolveCurrent 的 resolved 字段只在挂 agentPresets 时非 null, CLI 判定应看 revisionId
   - result.decision 是 gate 决策(PASS), state 才是 ACCEPTED; promote 分支判定用 state
 - 提交: P3 代码 commit(redact+controller+bin+测试), 任务文档 commit, archive 自动提交。
+
+## 2026-08-23 — P4 自动进化闭环(proposer 生成侧 + 评测集 + 系统 preset 治理)
+
+任务: 08-23-feat-08-23-auto-evolution(PRD-only 升级为全量, 已归档)。
+
+### 完成
+- **proposer 生成侧**: packages/evolution-controller/lib/proposer.js(failureEvidence→redact→LLM 严格 JSON→{hypothesis,evidence,mutations,candidateFiles}; 非 JSON/空假设/空文件/LLM 失败→拒绝)+ lib/llm-client.js(凭证 env→~/.dsh/.credentials.yaml, fetch, 零依赖)。absorbed-from dsh-self-evolving specs/03 §9(生成侧; 门槛侧是 proposal-check)。
+- **dsh-evolve --auto**: 流程重构(baseline 评测先行→候选→seal→candidate 评测→gate); --proposal-run 支持历史失败 run.json(growing-archive); parseArgs 修无值 flag bug(下一 token 以 -- 开头=无值)。
+- **评测集**: fixtures/rename-me(重命名+防改测试陷阱)+ readme-me(TASK.md 任务/README.md 交付物); refactor-rename-benchmark.yaml(dev)+ readme-write-benchmark.yaml(guard), 真实跑通均 100%。
+- **系统 preset 治理**: install-system-presets.mjs 初始安装 system-evaluator-9c24a8c1 + system-evolver-5fac7f0b; 三 logical(evaluate/system-evaluator/system-evolver)指针独立。
+- **真实闭环**: run-short.json 历史失败 → proposer 生成「Direct task mode+重试规则」变异 → seal evaluate-9682331a → gate INCONCLUSIVE 诚实拒绝(未 promote)。
+- 测试 77/77; commit 99b6271。
+
+### 踩坑
+- parseArgs 无值 flag 会吞下一个参数(--auto --benchmark → benchmark 丢失), 修: 下一 token 以 -- 开头视为无值。
+- readme-me 初版 README.md 既当任务说明又当交付物 → 改 TASK.md 分离。
+- fixtures 风格不一致(CJS module.exports vs ESM import)会直接 SyntaxError → 统一 ESM。
