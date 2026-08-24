@@ -1,0 +1,17 @@
+dsh-eval-console
+
+Copyright 2026 dsh-eval contributors
+
+This product includes software developed by the dsh-web project
+(https://github.com/zhu1090093659/dsh-web), specifically derived from the
+`dsh-task-board` package (npm @linxin666/dsh-client-ui-task-board v0.3.2),
+which is licensed under the Apache License, Version 2.0.
+
+Derived works under this package are marked with an `absorbed-from` note in
+their source headers pointing at the upstream file(s). The full Apache License
+2.0 text is reproduced in the LICENSE file in this directory. No other
+licenses apply to the absorbed portions.
+
+The dsh-eval side of this package (Host data adapter, six-state model, audit
+timeline, conversation.view registration) is original work by the dsh-eval
+project and is also made available under the Apache License, Version 2.0.

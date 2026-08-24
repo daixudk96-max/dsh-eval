@@ -1,6 +1,6 @@
 {
   "title": "P4: Web UI 进化控制台(基于已有 GUI 改)",
-  "status": "planning",
+  "status": "in_progress",
   "work": {
     "type": "feat",
     "mode": "standard",

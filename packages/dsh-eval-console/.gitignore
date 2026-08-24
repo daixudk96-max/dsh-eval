@@ -1,0 +1,9 @@
+# Build artifacts (tsc host build + tsdown client bundle; never committed)
+lib/
+dist/
+
+# Dependencies
+node_modules/
+
+# Editor / OS
+*.log

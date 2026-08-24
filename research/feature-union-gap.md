@@ -115,9 +115,10 @@
 
 ### P4 — 后备(用户点名要做, 排后)
 
-23. **Web UI 进化控制台**(用户 2026-08-23 更新: 「WebUI 如果已经人已经有了, 我们就在这的基础上改为」——从放弃移出)
-    候选基底: ① **dsh-web-ui**(DSH Web GUI 插件全家桶, ★5.4k, 未克隆, 含多列任务看板; 面板调研阶段确认 conversation.view slot 是最佳注册点, order:20 标签环)——用户此前主动搜索过 DSH 面板项目, 最可能指它; ② **dsh-evolve-modes**(已克隆, React slots + storage domain, 四维控件 UI)。
-    动作: 先克隆 dsh-web-ui 调研其 slot 注册与数据通道(webServer+SSE), 再定改造基底; 原型参考 docs/evolution-console-prototype.html(v2 已模拟 conversation.view 标签 + 六列看板)。
+23. **Web UI 进化控制台**(✅ 2026-08-23, 任务 feat-08-23-p4-webui-console 已归档)
+    基底选型: research/webui-base-selection.md 裁决采纳 **dsh-task-board**(dsh-web-ui 家族, @linxin666/dsh-client-ui-task-board v0.3.2, Apache-2.0)为代码基底; dsh-evolve-modes 否决(无 webServer/SSE、无看板、无 conversation.view)。
+    交付: **packages/dsh-eval-console**(新 Cordis 插件包): Host webServer 三端点 GET /eval/state + POST /eval/action(requestId 信封, 只读动作 detail/rollback/refresh, promote 不可达) + GET /eval/events(SSE 15s 心跳, revision 增量); Client conversation.view 标签 id:evolution order:20(rc.8 契约, 对齐 ui-trajectory 范例), 六列看板(SEALED/EVALUATING/ACCEPTED/PROMOTED/REJECTED/INCONCLUSIVE) + 当前版本条(gateRunId/approvalId 芯片) + 详情 modal + 回滚确认短语(ROLLBACK:<revisionId>) + 审计时间线(真实 ledger.jsonl); 真实数据 smoke: 20 行/6 列/103 事件, current evaluate-c4d8aec0。
+    验证: tsc 0 错, tsdown lib/client.js 49.48 kB(gzip 11.13 kB, 仅 react externals, 0 @deepseek-ai 值引用), 单测 22/22, smoke-routes 10/10, 回归 evolution-controller 168 + preset-registry 21 全绿。GUI 浏览器挂载验证待 DSH 重启后由主会话协调(未做)。
 24. **UCB-Air expand-vs-evaluate 调度**(用户问「UCB-Air 这个是啥呀」后表示要做, 放后面)
     来源: dsh-self-evolving specs/03(search 包)
     说明: UCB-Air = 把「生成新候选(expand)」vs「继续评测已有候选(evaluate)」建模为多臂老虎机, 每个候选按 UCB 分数 = 平均收益 + 探索项(sqrt(2 ln N / n)) 排序, 调度阈值 (N+P_eval)^alpha >= T(alpha=0.6) 决定下一步动作; 目的=有限预算下自动分配评测资源。

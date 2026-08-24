@@ -1,0 +1,12 @@
+# dsh-eval-console bundle patch: inserts the dual-face plugin row into the web
+# profile roster. The node half (exports ".") runs in the Host process and
+# serves the /eval state/action/events channel over webServer; the
+# `dsh.client` declaration in package.json makes the browser half
+# (exports "./client", served at /plugins/<id>/client.js) register the
+# conversation.view tab (id 'evolution', order 20).
+#
+# Mounted on DSH 0.1.0-rc.8. The package is resolvable when linked into the
+# DSH profile's plugin path (e.g. `dsh plugin --profile <name> add link:<path>`).
+- insert:
+    - id: ui-eval-console
+      name: 'dsh-eval-console'
