@@ -275,6 +275,33 @@ describe('dsh-eval command composition', () => {
     expect(observed.out).toContain('| benchmark | base | candidate | – |')
   })
 
+  it('emits a per-case decision delta table with compare --delta (P2-5)', async () => {
+    const dir = tempDir()
+    const runA: EvalRun = {
+      benchmark: 'base', model: 'm', createdAt: 1, trials: 1, seed: 0,
+      pricing: null, tempRoot: '/tmp', cases: [
+        { caseId: 'c1', trial: 1, status: 'completed', exitCode: 0, timedOut: false, grade: { taskSuccess: true, toolSelectionAccuracy: null } },
+        { caseId: 'c2', trial: 1, status: 'completed', exitCode: 0, timedOut: false, grade: { taskSuccess: false, toolSelectionAccuracy: null } },
+      ], aggregate: null, grading: null,
+    }
+    const runB: EvalRun = {
+      benchmark: 'candidate', model: 'm', createdAt: 2, trials: 1, seed: 0,
+      pricing: null, tempRoot: '/tmp', cases: [
+        { caseId: 'c1', trial: 1, status: 'completed', exitCode: 0, timedOut: false, grade: { taskSuccess: true, toolSelectionAccuracy: null } },
+        { caseId: 'c2', trial: 1, status: 'completed', exitCode: 0, timedOut: false, grade: { taskSuccess: true, toolSelectionAccuracy: null } },
+      ], aggregate: null, grading: null,
+    }
+    const pathA = join(dir, 'a.json')
+    const pathB = join(dir, 'b.json')
+    await writeRunReport(runA, pathA)
+    await writeRunReport(runB, pathB)
+    const observed = await bootEval(['compare', pathA, pathB, '--delta'])
+    expect(observed.exits).toEqual([0])
+    expect(observed.out).toContain('# Decision delta (B - A)')
+    expect(observed.out).toContain('| c1 | pass | pass | 0 |')
+    expect(observed.out).toContain('| c2 | fail | pass | +1 |')
+  })
+
   it('fails loudly for a missing compare input', async () => {
     const dir = tempDir()
     const pathA = join(dir, 'a.json')

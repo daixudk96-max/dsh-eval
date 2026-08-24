@@ -27,10 +27,11 @@ const { spawnSync } = require('node:child_process');
 
 const { Registry } = require('../../preset-registry/lib/registry.js');
 const { EvolutionController } = require('../lib/controller.js');
+const { failureRecordsFromRun, summarizeFailures, formatFailureSummary } = require('../lib/failures.js');
 
-// ---------- 参数解析 (--key value / --key=value) ----------
+// ---------- 参数解析 (--key value / --key=value / 位置参数) ----------
 function parseArgs(argv) {
-  const args = {};
+  const args = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const tok = argv[i];
     if (tok === '--help' || tok === '-h') { args.help = true; continue; }
@@ -44,6 +45,8 @@ function parseArgs(argv) {
       i += 1;
     } else if (tok.startsWith('--')) {
       args[tok.slice(2)] = true; // 无值 flag
+    } else {
+      args._.push(tok); // 位置参数(子命令/路径)
     }
   }
   return args;
@@ -78,6 +81,9 @@ function usage() {
   --export <path>        导出整个 registry 为自校验 JSON 快照
   --import <path>        从快照导入到 --registry 根(目标须不存在或为空)
   --status               只读列出每个 logical preset 的当前指针/历史链/digest 漂移校验
+
+失败聚合(P2-4, 只读 run.json):
+  failures <run.json...> 聚合一个或多个 run.json 的失败 case 为失败类视图
 
 闭环: current → 候选 → seal → 评测×2 → Gate → promote/拒绝(退出码 1 拒绝)`);
 }
@@ -239,6 +245,23 @@ async function main() {
     }
     const registry = new Registry({ root: args.registry });
     await printStatus(registry);
+    return;
+  }
+
+  // ---- failures mode (P2-4): aggregate failure classes from run.json files ----
+  if (args._[0] === 'failures') {
+    const runPaths = args._.slice(1);
+    if (runPaths.length === 0) {
+      console.error('error: failures requires at least one run.json path');
+      process.exit(2);
+    }
+    const records = [];
+    for (const p of runPaths) {
+      const abs = path.resolve(p);
+      const run = JSON.parse(fs.readFileSync(abs, 'utf8'));
+      records.push(...failureRecordsFromRun(run, p));
+    }
+    console.log(formatFailureSummary(summarizeFailures(records)));
     return;
   }
 

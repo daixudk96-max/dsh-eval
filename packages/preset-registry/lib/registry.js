@@ -6,6 +6,39 @@ const { ensureDir, writeJsonAtomic, readJson, appendLedger, readLedger, removeSt
 const { sha256, digestObject } = require('./hash');
 
 /**
+ * Build the inverse edit list that transforms `currentFiles` back into
+ * `targetFiles` (diff inversion). Pure data transform — no LLM. Each edit is
+ * `{ action: 'create'|'update'|'delete', path, content? }`; create/update carry
+ * the target content, delete restores by removing the file.
+ * @param {Record<string,string>} currentFiles - applied (current) content files.
+ * @param {Record<string,string>} targetFiles - revision to restore to.
+ * @returns {Array<{action:string,path:string,content?:string}>} inverse edits.
+ */
+function buildInverseEdits(currentFiles, targetFiles) {
+  const edits = [];
+  const all = new Set([...Object.keys(currentFiles), ...Object.keys(targetFiles)]);
+  for (const p of all) {
+    const cur = currentFiles[p];
+    const tgt = targetFiles[p];
+    if (cur === tgt) continue;
+    if (cur === undefined) edits.push({ action: 'create', path: p, content: tgt });
+    else if (tgt === undefined) edits.push({ action: 'delete', path: p });
+    else edits.push({ action: 'update', path: p, content: tgt });
+  }
+  return edits;
+}
+
+/** Set of file paths whose content differs between two file maps. */
+function changedFiles(aFiles, bFiles) {
+  const all = new Set([...Object.keys(aFiles), ...Object.keys(bFiles)]);
+  const changed = new Set();
+  for (const p of all) {
+    if (aFiles[p] !== bFiles[p]) changed.add(p);
+  }
+  return changed;
+}
+
+/**
  * preset-registry — Logical Preset + Immutable Revision + Current Pointer.
  *
  * Layout (root, default ~/.dsh/preset-registry/):
@@ -149,36 +182,39 @@ class Registry {
 
   /** CAS promote: only succeeds if expectedCurrent still matches the live pointer. */
   async promote(logicalId, { expectedCurrent, targetRevision, candidateDigest, gateRunId, approvalId }) {
-    return this._withLock(async () => {
-      await this._ensure();
-      const pointer = await readJson(this._pointerFile(logicalId), null);
-      const current = pointer && pointer.revisionId ? { revisionId: pointer.revisionId, digest: pointer.digest } : null;
-      if (expectedCurrent) {
-        if (!current) throw new Error(`CAS failed: expected current ${expectedCurrent.revisionId} but none exists`);
-        if (current.revisionId !== expectedCurrent.revisionId) {
-          throw new Error(`CAS failed: current=${current.revisionId} expected=${expectedCurrent.revisionId}`);
-        }
-        if (expectedCurrent.digest && current.digest !== expectedCurrent.digest) {
-          throw new Error(`CAS failed: digest mismatch (${current.digest} != ${expectedCurrent.digest})`);
-        }
+    return this._withLock(() => this._promoteLocked(logicalId, { expectedCurrent, targetRevision, candidateDigest, gateRunId, approvalId }));
+  }
+
+  /** Promote core; assumes the registry lock is already held (call via promote or rollbackContent). */
+  async _promoteLocked(logicalId, { expectedCurrent, targetRevision, candidateDigest, gateRunId, approvalId }) {
+    await this._ensure();
+    const pointer = await readJson(this._pointerFile(logicalId), null);
+    const current = pointer && pointer.revisionId ? { revisionId: pointer.revisionId, digest: pointer.digest } : null;
+    if (expectedCurrent) {
+      if (!current) throw new Error(`CAS failed: expected current ${expectedCurrent.revisionId} but none exists`);
+      if (current.revisionId !== expectedCurrent.revisionId) {
+        throw new Error(`CAS failed: current=${current.revisionId} expected=${expectedCurrent.revisionId}`);
       }
-      const revDir = this._revisionDir(candidateDigest);
-      if (!fs.existsSync(path.join(revDir, 'manifest.json'))) {
-        throw new Error(`target revision not sealed: digest ${candidateDigest}`);
+      if (expectedCurrent.digest && current.digest !== expectedCurrent.digest) {
+        throw new Error(`CAS failed: digest mismatch (${current.digest} != ${expectedCurrent.digest})`);
       }
-      const next = {
-        revisionId: targetRevision, digest: candidateDigest,
-        updatedAt: new Date().toISOString(), gateRunId: gateRunId || null, approvalId: approvalId || null,
-      };
-      await appendLedger(this.dirs.ledger, { op: 'promote', logicalId, targetRevision, candidateDigest, gateRunId, approvalId });
-      await writeJsonAtomic(this._pointerFile(logicalId), next);
-      const logical = await readJson(this._logicalFile(logicalId), { logicalId, current: null, previous: [], candidates: [] });
-      if (logical.current) logical.previous.unshift(logical.current);
-      logical.previous = logical.previous.slice(0, this.rollbackWindow);
-      logical.current = { revisionId: targetRevision, digest: candidateDigest };
-      await writeJsonAtomic(this._logicalFile(logicalId), logical);
-      return { ok: true, revisionId: targetRevision, digest: candidateDigest };
-    });
+    }
+    const revDir = this._revisionDir(candidateDigest);
+    if (!fs.existsSync(path.join(revDir, 'manifest.json'))) {
+      throw new Error(`target revision not sealed: digest ${candidateDigest}`);
+    }
+    const next = {
+      revisionId: targetRevision, digest: candidateDigest,
+      updatedAt: new Date().toISOString(), gateRunId: gateRunId || null, approvalId: approvalId || null,
+    };
+    await appendLedger(this.dirs.ledger, { op: 'promote', logicalId, targetRevision, candidateDigest, gateRunId, approvalId });
+    await writeJsonAtomic(this._pointerFile(logicalId), next);
+    const logical = await readJson(this._logicalFile(logicalId), { logicalId, current: null, previous: [], candidates: [] });
+    if (logical.current) logical.previous.unshift(logical.current);
+    logical.previous = logical.previous.slice(0, this.rollbackWindow);
+    logical.current = { revisionId: targetRevision, digest: candidateDigest };
+    await writeJsonAtomic(this._logicalFile(logicalId), logical);
+    return { ok: true, revisionId: targetRevision, digest: candidateDigest };
   }
 
   /** O(1) pointer switch back to a previous revision; history is never deleted. */
@@ -203,6 +239,92 @@ class Registry {
       await writeJsonAtomic(this._logicalFile(logicalId), logical);
       return { ok: true, revisionId: target.revisionId, digest: target.digest };
     });
+  }
+
+  /**
+   * Content-level deterministic rollback (P2-1/2): rebuild the inverse edits
+   * that transform the applied current content back to a target revision's
+   * content (diff inversion, no LLM), then write the restored content back as
+   * a NEW content-addressed revision and promote it via CAS. This deepens the
+   * pointer-level `rollback` to a content-level restore that is byte-for-byte
+   * reproducible from the revisions themselves.
+   *
+   * Conflict detection (P2-2): when `detectConflicts` (default true) and not
+   * `force`, any intermediate revision between current and target that changed
+   * a file the rollback touches raises a conflict error — conservative, human
+   * decides. `force` overrides.
+   * @param {string} logicalId
+   * @param {string} targetRevisionId - revision to restore to (must be in history).
+   * @param {object} [opts]
+   * @param {boolean} [opts.detectConflicts=true] - reject when an intermediate
+   *   revision changed a file the rollback touches.
+   * @param {boolean} [opts.force=false] - skip conflict detection.
+   * @param {string} [opts.gateRunId='rollback-content'] - gate binding for the new revision.
+   * @param {string} [opts.approvalId='rollback-content'] - approval binding for the new revision.
+   * @returns {Promise<{ok:boolean,noop?:boolean,edits:Array,revisionId:string,digest:string}>}
+   */
+  async rollbackContent(logicalId, targetRevisionId, { detectConflicts = true, force = false, gateRunId = 'rollback-content', approvalId = 'rollback-content' } = {}) {
+    return this._withLock(async () => {
+      await this._ensure();
+      const current = await this.resolveCurrent(logicalId);
+      if (!current) throw new Error(`no current revision for ${logicalId}`);
+      const history = await this.history(logicalId);
+      const target = history.find((r) => r.revisionId === targetRevisionId);
+      if (!target) throw new Error(`target revision not in history: ${targetRevisionId}`);
+      const currentContent = await this.revisionContent(current.digest);
+      const targetContent = await this.revisionContent(target.digest);
+      if (!currentContent || !targetContent) throw new Error('rollback: revision content missing');
+      const edits = buildInverseEdits(currentContent.files, targetContent.files);
+      if (edits.length === 0) {
+        await appendLedger(this.dirs.ledger, { op: 'rollbackContent', logicalId, targetRevisionId, edits: 0, noop: true });
+        return { ok: true, noop: true, edits, revisionId: current.revisionId, digest: current.digest };
+      }
+      if (detectConflicts && !force) {
+        const conflict = await this._detectRollbackConflict(logicalId, current, target, edits);
+        if (conflict) throw new Error(`rollback conflict: ${conflict}`);
+      }
+      // Write back: stage the restored (target) content, seal a new revision, promote via CAS.
+      const candidateId = await this.createCandidate(logicalId, { sourceRevisionId: current.revisionId, evolutionRunId: 'rollback-content' });
+      const dir = this._candidateDir(candidateId);
+      for (const [name, content] of Object.entries(targetContent.files)) {
+        const abs = path.join(dir, name);
+        await ensureDir(path.dirname(abs));
+        await fsp.writeFile(abs, content, 'utf8');
+      }
+      const sealed = await this.sealRevision(candidateId);
+      await this._promoteLocked(logicalId, {
+        expectedCurrent: { revisionId: current.revisionId, digest: current.digest },
+        targetRevision: sealed.revisionId, candidateDigest: sealed.digest,
+        gateRunId, approvalId,
+      });
+      await appendLedger(this.dirs.ledger, { op: 'rollbackContent', logicalId, targetRevisionId, edits: edits.length, revisionId: sealed.revisionId, digest: sealed.digest });
+      return { ok: true, edits, revisionId: sealed.revisionId, digest: sealed.digest };
+    });
+  }
+
+  /**
+   * Conservative partial-rollback conflict detection: any intermediate revision
+   * between current and target that changed a file the rollback touches is a
+   * conflict (human decides). Returns a human-readable reason or null.
+   */
+  async _detectRollbackConflict(logicalId, current, target, edits) {
+    const history = await this.history(logicalId);
+    const targetIdx = history.findIndex((r) => r.revisionId === target.revisionId);
+    if (targetIdx < 0) return null;
+    const touched = new Set(edits.map((e) => e.path));
+    for (let i = 1; i < targetIdx; i += 1) {
+      const rev = history[i];
+      const pred = history[i + 1];
+      const revContent = await this.revisionContent(rev.digest);
+      const predContent = await this.revisionContent(pred.digest);
+      if (!revContent || !predContent) continue;
+      const changed = changedFiles(revContent.files, predContent.files);
+      const intersect = [...changed].filter((f) => touched.has(f));
+      if (intersect.length > 0) {
+        return `intermediate revision ${rev.revisionId} changed ${intersect.join(', ')}`;
+      }
+    }
+    return null;
   }
 
   /** Query revision history (active + previous). */
@@ -415,4 +537,4 @@ class Registry {
   }
 }
 
-module.exports = { Registry };
+module.exports = { Registry, buildInverseEdits, changedFiles };

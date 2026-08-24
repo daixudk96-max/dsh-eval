@@ -32,6 +32,7 @@ export type EvalStartupValues =
     kind: 'compare'
     runPathA: string
     runPathB: string
+    delta?: boolean
   }
   | {
     kind: 'import'
@@ -113,8 +114,9 @@ export function evalCommand(publish: (values: EvalStartupValues) => void): Comma
   compare
     .argument('<run-a.json>', 'baseline run report')
     .argument('<run-b.json>', 'candidate run report')
-    .action((runPathA: string, runPathB: string) => {
-      publish({ kind: 'compare', runPathA, runPathB })
+    .option('--delta', 'emit a per-case before→after decision delta table')
+    .action((runPathA: string, runPathB: string, options: { delta?: boolean }) => {
+      publish({ kind: 'compare', runPathA, runPathB, ...(options.delta ? { delta: true } : {}) })
     })
   const importer = program.command('import').description('import an external harness session log as a run report')
   importer

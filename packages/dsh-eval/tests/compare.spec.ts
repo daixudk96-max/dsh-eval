@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compareRuns, pairedCompare, renderCompareMarkdown } from '../src/compare.ts'
+import { compareRuns, pairedCompare, renderCompareMarkdown, renderDecisionDelta } from '../src/compare.ts'
 import type { EvalRun, EvalTrialResult } from '../src/types.ts'
 
 function buildRun(overrides: Partial<EvalRun> = {}): EvalRun {
@@ -172,6 +172,47 @@ describe('dsh-eval comparison', () => {
       b: '–',
       delta: '+0.0',
     })
+  })
+
+  it('renders a per-case before→after decision delta table (P2-5)', () => {
+    const a = buildRun({
+      cases: [
+        trial('c1', 1, true, 2, 10),
+        trial('c2', 1, false, 3, 15),
+        trial('c3', 1, true, 1, 5),
+      ],
+    })
+    const b = buildRun({
+      cases: [
+        trial('c1', 1, true, 2, 10),
+        trial('c2', 1, true, 4, 20),
+        trial('c4', 1, false, 3, 15),
+      ],
+    })
+    const markdown = renderDecisionDelta(a, b)
+    expect(markdown).toContain('# Decision delta (B - A)')
+    expect(markdown).toContain('| case | before (A) | after (B) | delta |')
+    expect(markdown).toContain('| c1 | pass | pass | 0 |')
+    expect(markdown).toContain('| c2 | fail | pass | +1 |')
+    expect(markdown).toContain('| c3 | pass | – | – |')
+    expect(markdown).toContain('| c4 | – | fail | – |')
+  })
+
+  it('renders numeric judge-score deltas when task success is absent', () => {
+    const scored = (caseId: string, score: number): EvalTrialResult => ({
+      caseId,
+      trial: 1,
+      status: 'completed',
+      exitCode: 0,
+      timedOut: false,
+      judge: { finalAnswerScore: score, hallucination: false },
+      metrics: METRICS,
+    })
+    const a = buildRun({ cases: [scored('c1', 5), scored('c2', 8)] })
+    const b = buildRun({ cases: [scored('c1', 7), scored('c2', 6)] })
+    const markdown = renderDecisionDelta(a, b)
+    expect(markdown).toContain('| c1 | 5 | 7 | +2 |')
+    expect(markdown).toContain('| c2 | 8 | 6 | -2 |')
   })
 
   it('handles unmatched and unmeasured paired trials', () => {

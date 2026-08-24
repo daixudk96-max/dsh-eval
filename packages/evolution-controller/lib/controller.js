@@ -7,6 +7,8 @@ const { inspectOverfit } = require('./overfit');
 const { BudgetLedger } = require('./budget');
 const { nearDuplicate, contentHash } = require('./near-dup');
 const { redactReviewText } = require('./redact');
+const { prepareRollback, applyRollback } = require('./rollback');
+const { scanContentThreats } = require('./threat');
 
 /**
  * EvolutionController — deterministic governance core.
@@ -28,14 +30,20 @@ class EvolutionController {
    * @param {object} [opts.budget] { dir, limitUsd } budget ledger config; omitted = unlimited
    * @param {string[]} [opts.redactValues] known credential values masked from
    *   hypothesis/evidence before they reach the audit ledger (default none).
+   * @param {boolean} [opts.autoRollbackOnReject=false] when a candidate is
+   *   REJECTED after evaluate, auto-prepare the inverse edits that would
+   *   restore current content to the candidate's source revision and record
+   *   the intent in the audit ledger — but never auto-apply; applying always
+   *   requires explicit approval via applyRollback.
    */
-  constructor({ registry, auditDir, gateDefaults = {}, budget, redactValues = [] }) {
+  constructor({ registry, auditDir, gateDefaults = {}, budget, redactValues = [], autoRollbackOnReject = false }) {
     if (!registry) throw new Error('registry is required');
     this.registry = registry;
     this.auditDir = auditDir;
     this.gateDefaults = gateDefaults;
     this.budget = budget ? new BudgetLedger(budget) : null;
     this.redactValues = redactValues;
+    this.autoRollbackOnReject = autoRollbackOnReject;
     this.runs = new Map();
   }
 
@@ -95,10 +103,13 @@ class EvolutionController {
    * @param {object|null} [args.benchmarkMeta] - in-memory benchmark corpus for the
    *   overfit check: { benchmarkDigest, cases: [{ id, statement, privateRubric? }] }.
    *   Omitted = no corpus (legacy callers, check skipped). Never persisted.
+   * @param {boolean} [args.threatScan=true] - scan candidate content for
+   *   prompt-injection/exfiltration/secret patterns before any staging write;
+   *   a hit blocks the candidate and is audited as threat-blocked.
    */
   async createCandidate(runId, {
     logicalId, sourceRevisionId, hypothesis, evidence = [], mutations = [],
-    readCandidateFiles, benchmarkMeta,
+    readCandidateFiles, benchmarkMeta, threatScan = true,
   }) {
     const run = this._require(runId);
     assertTransition(run.state, 'SEALED'); // candidate-created is within DRAFT flow
@@ -133,10 +144,20 @@ class EvolutionController {
         throw new Error(`proposal rejected: benchmark overfit (${findings.map((f) => f.code).join(', ')})`);
       }
     }
+    // --- write-time threat scan (P2-3): block before any staging write ---
+    if (threatScan) {
+      const findings = this._scanThreats(candidateFiles, mutations);
+      if (findings.length > 0) {
+        await this._audit({ runId, event: 'threat-blocked', findings });
+        throw new Error(`proposal rejected: threat scan blocked (${findings.map((f) => f.reason).join('; ')})`);
+      }
+    }
     const candidateId = await this.registry.createCandidate(logicalId, { sourceRevisionId, evolutionRunId: runId });
     for (const m of mutations) await this.registry.patchCandidate(candidateId, m);
     run.candidateId = candidateId;
     run.mutations = mutations;
+    run.logicalId = logicalId;
+    run.sourceRevisionId = sourceRevisionId;
     // Redact hypothesis/evidence before they are stored on the run or written
     // to the audit ledger (failure evidence may carry credentials/paths).
     run.hypothesis = this._redact(String(hypothesis ?? ''));
@@ -147,6 +168,30 @@ class EvolutionController {
       runId, event: 'candidate-created', candidateId, hypothesis: run.hypothesis, evidence: run.evidence.length,
     });
     return candidateId;
+  }
+
+  /**
+   * Scan candidate content (files + mutation payloads) for threat patterns.
+   * Returns findings [{ path, reason }]; empty when clean.
+   * @param {Record<string,string>} candidateFiles - content files to be staged.
+   * @param {object[]} mutations - mutation records (content-bearing fields scanned).
+   * @returns {Array<{path:string,reason:string}>}
+   */
+  _scanThreats(candidateFiles, mutations) {
+    const findings = [];
+    for (const [name, content] of Object.entries(candidateFiles)) {
+      const reason = scanContentThreats(content);
+      if (reason) findings.push({ path: name, reason });
+    }
+    for (const m of mutations) {
+      for (const key of ['content', 'newContent', 'value']) {
+        if (typeof m[key] === 'string') {
+          const reason = scanContentThreats(m[key]);
+          if (reason) findings.push({ path: m.path ?? '(mutation)', reason });
+        }
+      }
+    }
+    return findings;
   }
 
   /**
@@ -201,6 +246,17 @@ class EvolutionController {
         ? { rubric: { score: rubric.score, minScore: rubric.minScore, regressions: rubric.regressions ?? [] } }
         : {}),
     });
+    // autoRollbackOnReject: prepare (never apply) the inverse edits that would
+    // restore current content to the candidate's source revision, and record
+    // the intent. Applying still requires explicit approval via applyRollback.
+    if (run.state === 'REJECTED' && this.autoRollbackOnReject && run.logicalId) {
+      const rollback = await prepareRollback(this, runId, { logicalId: run.logicalId });
+      run.rollback = { edits: rollback.edits, target: rollback.target, preparedAt: new Date().toISOString() };
+      await this._audit({
+        runId, event: 'rollback-prepared', logicalId: run.logicalId,
+        target: rollback.target, edits: rollback.edits.length,
+      });
+    }
     return run;
   }
 
@@ -240,6 +296,15 @@ class EvolutionController {
         }
       }
     }
+    // Write-time threat re-scan (P2-3): defense-in-depth before the pointer moves.
+    const sealedContent = await this._revisionFiles(logicalId, run.sealed.digest);
+    if (sealedContent) {
+      const findings = this._scanThreats(sealedContent.files ?? {}, []);
+      if (findings.length > 0) {
+        await this._audit({ runId, event: 'threat-blocked', findings });
+        throw new Error(`promote rejected: threat scan blocked (${findings.map((f) => f.reason).join('; ')})`);
+      }
+    }
     const expectedCurrent = await this.registry.resolveCurrent(logicalId);
     const gateResult = run.gateResult || {};
     const result = await this.registry.promote(logicalId, {
@@ -253,6 +318,30 @@ class EvolutionController {
     run.promotedAt = new Date().toISOString();
     run.promotedRevision = result.revisionId;
     await this._audit({ runId, event: 'promoted', revisionId: result.revisionId, digest: result.digest, approvalId, gateRuleSet: gateResult.ruleSetVersion });
+    return result;
+  }
+
+  /**
+   * Apply a prepared content-level rollback for a run (P2-1/2). Requires an
+   * explicit approval binding — never auto-applied, even with
+   * autoRollbackOnReject. Restores current content to the run's source
+   * revision via registry.rollbackContent (conflict detection on by default).
+   * @param {string} runId
+   * @param {object} args
+   * @param {string} args.logicalId
+   * @param {string} args.approvalId - user confirmation binding (required).
+   * @param {boolean} [args.force=false] - override conflict detection.
+   * @returns {Promise<object>} registry.rollbackContent result.
+   */
+  async applyRollback(runId, { logicalId, approvalId, force = false }) {
+    const run = this._require(runId);
+    const result = await applyRollback(this, runId, { logicalId, approvalId, force });
+    run.rollbackAppliedAt = new Date().toISOString();
+    await this._audit({
+      runId, event: 'rollback-applied', logicalId, approvalId,
+      target: run.sourceRevisionId, revisionId: result.revisionId, digest: result.digest,
+      edits: result.edits ? result.edits.length : 0,
+    });
     return result;
   }
 

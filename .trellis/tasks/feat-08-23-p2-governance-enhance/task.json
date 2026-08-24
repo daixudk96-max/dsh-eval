@@ -1,6 +1,6 @@
 {
   "title": "P2: 进化治理增强(逆编辑回滚/威胁扫描/failures/decisionReport)",
-  "status": "planning",
+  "status": "in_progress",
   "work": {
     "type": "feat",
     "mode": "standard",

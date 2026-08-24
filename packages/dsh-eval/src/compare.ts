@@ -222,3 +222,52 @@ export function renderCompareMarkdown(rows: readonly CompareRow[]): string {
     '',
   ].join('\n')
 }
+
+/** Read one case's decision outcome (task success, else judge score), or null. */
+function caseOutcome(run: EvalRun, caseId: string): string | null {
+  const trial = run.cases.find(c => c.caseId === caseId && c.status === 'completed')
+  if (trial === undefined) return null
+  const task = trial.grade?.taskSuccess
+  if (task === true) return 'pass'
+  if (task === false) return 'fail'
+  const score = trial.judge?.finalAnswerScore
+  return score === null || score === undefined ? null : String(score)
+}
+
+/** Signed delta between two decision outcomes (B - A). */
+function decisionDelta(before: string | null, after: string | null): string {
+  if (before === null || after === null) return '–'
+  const beforeNum = Number(before)
+  const afterNum = Number(after)
+  if (!Number.isNaN(beforeNum) && !Number.isNaN(afterNum)) {
+    const delta = afterNum - beforeNum
+    return `${delta >= 0 ? '+' : ''}${delta}`
+  }
+  if (before === after) return '0'
+  return before === 'pass' ? '-1' : '+1'
+}
+
+/**
+ * Render a per-case before→after decision delta table (P2-5). For each case
+ * present in either run, shows the before (run A) and after (run B) decision
+ * outcome — task success (pass/fail) or judge score — and the signed delta.
+ * @param a - the baseline run.
+ * @param b - the candidate run.
+ * @returns the markdown text.
+ */
+export function renderDecisionDelta(a: EvalRun, b: EvalRun): string {
+  const caseIds = [...new Set([...a.cases.map(c => c.caseId), ...b.cases.map(c => c.caseId)])]
+  const lines = [
+    '# Decision delta (B - A)',
+    '',
+    '| case | before (A) | after (B) | delta |',
+    '|---|---|---|---|',
+  ]
+  for (const caseId of caseIds) {
+    const before = caseOutcome(a, caseId)
+    const after = caseOutcome(b, caseId)
+    lines.push(`| ${caseId} | ${before ?? '–'} | ${after ?? '–'} | ${decisionDelta(before, after)} |`)
+  }
+  lines.push('')
+  return lines.join('\n')
+}
