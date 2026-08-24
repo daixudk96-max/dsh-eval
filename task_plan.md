@@ -25,3 +25,33 @@
 ## 关键决策记录
 - 核实手段：curl 直连 GitHub API（匿名限流 60/hr，403 非 404，需 HTML 复验）+ README 全文对照 + DSH 源码实证
 - 三处选型修正：HarnessEval-W 仅范式；ctx.eval 以 hccccc01333/dsh-eval 为底座；ZK 主干让位 Lhy723 Profile 闭环 + ZK entry 级 mutation
+
+## 当前规划：P0 可信评测闭环与 Registry 备份（2026-08-23）
+
+### 当前目标
+
+把已有 LLM-judge 执行链真正接入进化 gate，并补齐 benchmark 污染早拒、frozen epoch/material snapshot、preset-registry 可验证 export/import。
+
+### 当前阶段
+
+| 阶段 | 状态 | 内容 |
+|---|---|---|
+| P0-Evidence | complete | 核对 judge/runner/index、dsh-evolve、gate、registry 与参考仓库源码 |
+| P0-Convergence | complete | 重写 Trellis `prd.md`、`design.md`、`implement.md`，新增 `plan-overview.md` |
+| P0-Review | in_progress | 等用户确认严格 fail-closed 契约与完整计划 |
+| P0-Implementation | pending | 未运行 `task.py start`，未修改产品代码 |
+
+### 当前权威工件
+
+- `.trellis/tasks/feat-08-23-p0-judge-overfit-frozen/prd.md`
+- `.trellis/tasks/feat-08-23-p0-judge-overfit-frozen/design.md`
+- `.trellis/tasks/feat-08-23-p0-judge-overfit-frozen/implement.md`
+- `.trellis/tasks/feat-08-23-p0-judge-overfit-frozen/plan-overview.md`
+
+### 关键规划决策
+
+- 不重复实现已存在的 judge stream seam；先诊断真实运行，再补可观察诊断与 `dsh-evolve` rubric mapping。
+- judge 缺失/失败不伪造成 0 分；在要求业务 rubric 的进化闭环中 fail closed。
+- overfit 只在 proposal/controller 早拒，扫描 source→candidate 增量；gate 不读取私有 benchmark 原文。
+- frozen digest 覆盖评测语义和显式 materials，不默认 hash agent 可修改的整个 workspace。
+- registry import P0 只支持空 root；逐文件 SHA-256 证明备份内容完整，legacy revision digest 继续只验证 manifest。

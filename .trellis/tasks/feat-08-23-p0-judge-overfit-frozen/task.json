@@ -1,0 +1,11 @@
+{
+  "title": "P0: LLM-judge 真实执行 + overfit 检测 + frozen 基准 + export/import",
+  "status": "in_progress",
+  "work": {
+    "type": "feat",
+    "mode": "standard",
+    "stage": "prd",
+    "execution_lane": "standard"
+  },
+  "description": "差距清单 P0 四项: 内嵌 LLM-judge 真实执行(业务指标层入闭环)、overfit/污染检测(assertCandidateNotBenchmarkSpecific)、frozen 冻结基准(case digest 不可变)、registry export/import 备份。排期: 立即实施(下一轮开工)。"
+}

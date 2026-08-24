@@ -184,6 +184,7 @@ gate 新规则: rubricScore < rubricMinScore → FAIL
 | P1(✅ 2026-08-22) | 评测侧: `split` 字段 + 与 guard 子集 + fail-closed gradeTrial | P0 | benchmark 双集跑通(taskSuccess 1.0 ×2, commit ea58fbc) |
 | P2(✅ 2026-08-22) | 进化侧: proposer(失败证据→多假设候选)+ budget ledger + 近重复检测入 promote | P1 | proposal-check 11 测 / budget 6 测 / controller-p2 6 测全绿 + 真实闭环(见下) |
 | P3(✅ 2026-08-23) | 治理: 审查脱敏(redact.js, 照 lmzhen redact.ts 改写)+ 进化命令面(bin/dsh-evolve.js 单命令闭环) | P2 | redact 11 测 + controller-redact 2 测全绿; CLI 真实闭环: 无 --approve 拒绝 / 带 --approve promote(evaluate-c4d8aec0) + 审计无凭证残留 |
+| P0-2(进行中 2026-08-23) | 可观察 Judge + Overfit 检测 + Frozen Epoch + Registry Archive(任务 feat-08-23-p0-judge-overfit-frozen): judge HTTP fallback(baseUrl/apiKeyEnv 直连, 内嵌 judge 真实执行) / overfit.js 四规则 delta 扫描入 createCandidate / benchmark frozen+materials 语义 digest + 运行中漂移→invalid / exportSnapshot+importSnapshot 自校验 JSON 包 + dsh-evolve --export/--import | P3 | judge/benchmark/model spec + overfit 9 测 + controller-overfit 3 测 + archive 6 测 + runner frozen 3 测全绿; 真实 export/import 139 文件 23 revisions 往返; 真实评测 judge 打分验证(进行中) |
 
 ## 6. 明确放弃(不再讨论)
 

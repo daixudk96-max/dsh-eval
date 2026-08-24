@@ -44,3 +44,23 @@ arxiv 2608.16859「HarnessEval-W」✓（bytez/alphaxiv/hyper.ai/arxiv 均有）
 - 运行时组合（C:\Users\daixu\.dsh\profiles\web\cordis.yml = 空根 `[]`）：组合由 bundles + cordis.patch.yml 叠加；插件=node_modules 包+patch。已装：@dsh-external/workflow、@dsh-external/tdd-pipeline、dsh-test-runner、dsh-active-context-pruning、dsh-plugin-clinic、dsh-capability-inspector、@dsh-adaptive/*、@xilin3/dsh-prompt-persona 等。
 - 用户 preset 目录 ~/.dsh/.agent-presets **尚未创建**（glob 报不存在）→ 新建 system-evaluator/system-evolver 无冲突。
 - 本会话具备 dynamic Cordis Plugin 机制（cordis_define/cordis_run），可作插件开发与试运行载体。
+
+## 当前 P0 规划证据（2026-08-23）
+
+### Judge 真实缺口
+
+- `packages/dsh-eval/src/judge.ts:16-28,69-89,140-169,178-197`、`packages/dsh-eval/src/runner.ts:214-233,435-477`、`packages/dsh-eval/src/index.ts:51-54,232-245` 已有生产 LLM-judge seam、rubric prompt、调用、解析、聚合与服务注入；原计划“从零接线”已被源码推翻。
+- 真正断点位于 `packages/evolution-controller/bin/dsh-evolve.js:90-106,226-232`：`evalEvidence(run)` 不读取 `finalAnswerScore/hallucinationRate`，也不向 `controller.evaluate(...)` 传 rubric。
+- 历史真实 run 的 null 分数只证明闭环未产出有效 judge 证据，不能在最新 smoke 前断言根因是“host profile 无 llm”。
+
+### Overfit 与 Frozen
+
+- `packages/evolution-controller/lib/proposal-check.js:102-146` 没有 benchmark 污染输入；最佳挂点是 `packages/evolution-controller/lib/controller.js:95-128` 的 registry 写入前早拒。
+- `research/dsh-self-evolution/src/candidate.ts:201-239` 提供 digest/statement/private rubric/`case_id` 四类 exact-text 参考。
+- `packages/evolution-controller/lib/gate.js:22-39` 有 `digestOk/epochSame` 但调用方默认 true；`packages/dsh-eval` 尚无 snapshot/epoch schema。
+- `research/dsh-self-evolution/src/benchmark.ts:107-166` 与 `research/dsh-self-evolution/src/engine.ts:158-169,305-320` 证明可用模式是“加载时算语义 digest、整轮后 reload 比较”，不是默认 hash 整个 agent workspace。
+
+### Registry 完整性
+
+- `packages/preset-registry/lib/registry.js:130-147` 的 revision digest 来源是 manifest；`packages/preset-registry/lib/registry.js:236-242` 只重算 manifest，不能检测内容文件删除或篡改。
+- P0 export package 必须用逐文件 SHA-256 + packageDigest；legacy `verifyRevisionDigest(...)` 只作为另一项 manifest 验证，二者不能混称。

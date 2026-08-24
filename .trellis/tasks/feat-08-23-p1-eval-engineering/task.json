@@ -1,0 +1,11 @@
+{
+  "title": "P1: 评测工程化(加权聚合/replay/import codex/status/case 生命周期)",
+  "status": "planning",
+  "work": {
+    "type": "feat",
+    "mode": "standard",
+    "stage": "prd",
+    "execution_lane": "standard"
+  },
+  "description": "差距清单 P1: case weight 加权聚合、keyless replay(dsh-llm-replay)、import codex|claude-code、dsh-evolve status 命令、case 生命周期 draft→calibrating→frozen + CaseMeta 标定、无 LLM 机械校验、质量反馈 feedback→quality_score。排期: P0 完成后实施。"
+}
