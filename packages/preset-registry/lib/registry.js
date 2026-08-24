@@ -86,6 +86,16 @@ class Registry {
    */
   _safeFileId(logicalId) { return String(logicalId).replace(/%|:/g, (c) => (c === '%' ? '%25' : '%3A')); }
 
+  /**
+   * Inverse of _safeFileId: decode a file-name-safe logicalId back to the
+   * original id (e.g. `state%3Aprompt%3Aarchive` → `state:prompt:archive`).
+   * Identity for ids that were never encoded. '%25' is decoded before '%3A'
+   * so a literal `%3A` in the original id (encoded as `%253A`) round-trips.
+   */
+  decodeFileId(encodedId) {
+    return String(encodedId).replace(/%25|%3A/g, (c) => (c === '%25' ? '%' : ':'));
+  }
+
   _pointerFile(logicalId) { return path.join(this.dirs.pointers, `${this._safeFileId(logicalId)}.current.json`); }
   _logicalFile(logicalId) { return path.join(this.dirs.logical, `${this._safeFileId(logicalId)}.json`); }
   _revisionDir(digest) { return path.join(this.dirs.revisions, digest); }

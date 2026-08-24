@@ -167,3 +167,14 @@ test('promote validates sealed target and CAS digest', async (t) => {
     /CAS failed/,
   );
 });
+
+test('decodeFileId round-trips _safeFileId and passes through plain ids', async (t) => {
+  const { registry } = await makeRegistry(t);
+  for (const id of ['evaluate', 'state:prompt:style', 'a%b:c%', '中文:id']) {
+    assert.equal(registry.decodeFileId(registry._safeFileId(id)), id, `round-trip ${id}`);
+  }
+  // never-encoded ids pass through unchanged
+  assert.equal(registry.decodeFileId('evaluate'), 'evaluate');
+  // literal %3A in the original id (encoded as %253A) round-trips, not decoded twice
+  assert.equal(registry.decodeFileId(registry._safeFileId('x%3A')), 'x%3A');
+});

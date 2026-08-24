@@ -74,6 +74,8 @@ function usage() {
   --split <dev|guard>    默认 dev
   --approve <approvalId> 可选: 人审绑定; 缺省 = 演示拒绝
   --min-effect <n>       默认 0.05
+  --budget-dir <dir>     可选: 预算 ledger 目录(与 --budget-limit 齐备且 > 0 才启用)
+  --budget-limit <usd>   可选: 进化预算上限 USD(> 0); 已花 ≥ 上限时 newRun 被拒
   --dsh <launcher>       默认: node E:\\github\\dsh\\apps\\cli\\lib\\bin.js
   --out <dir>            默认 ./evolve-out, 写 baseline.json/candidate.json/gate.json/result.json
 
@@ -174,7 +176,7 @@ async function currentFiles(registry, logicalId) {
 async function printStatus(registry) {
   const logicalDir = registry.dirs.logical;
   const logicalIds = fs.existsSync(logicalDir)
-    ? fs.readdirSync(logicalDir).filter((name) => name.endsWith('.json')).map((name) => name.replace(/\.json$/, ''))
+    ? fs.readdirSync(logicalDir).filter((name) => name.endsWith('.json')).map((name) => registry.decodeFileId(name.replace(/\.json$/, '')))
     : [];
   if (logicalIds.length === 0) {
     console.log('status: registry has no logical presets');
@@ -211,7 +213,8 @@ async function main() {
   if (args.export || args.import) {
     if (!args.registry) { console.error('error: --registry is required for --export/--import'); process.exit(2); }
     const incompatible = ['benchmark', 'logical', 'candidate', 'auto', 'approve', 'split', 'min-effect', 'dsh',
-      'benchmark-baseline', 'benchmark-candidate', 'proposal-run', 'model', 'api-key-env', 'redact-value'];
+      'benchmark-baseline', 'benchmark-candidate', 'proposal-run', 'model', 'api-key-env', 'redact-value',
+      'budget-dir', 'budget-limit'];
     for (const flag of incompatible) {
       if (args[flag] !== undefined) {
         console.error(`error: --${flag} is incompatible with --export/--import`);
@@ -236,7 +239,7 @@ async function main() {
     if (!args.registry) { console.error('error: --registry is required for --status'); process.exit(2); }
     const incompatible = ['benchmark', 'logical', 'candidate', 'auto', 'approve', 'split', 'min-effect', 'dsh',
       'benchmark-baseline', 'benchmark-candidate', 'proposal-run', 'model', 'api-key-env', 'redact-value',
-      'export', 'import'];
+      'export', 'import', 'budget-dir', 'budget-limit'];
     for (const flag of incompatible) {
       if (args[flag] !== undefined) {
         console.error(`error: --${flag} is incompatible with --status`);
@@ -278,7 +281,19 @@ async function main() {
 
   const registry = new Registry({ root: registryRoot });
   const auditDir = path.join(registryRoot, '..', 'evolution-audit');
-  const controller = new EvolutionController({ registry, auditDir });
+  // --budget-dir/--budget-limit 齐备且 limit > 0 才启用预算(≤0 与 ledger 语义一致 =
+  // 无限, 单侧/非正数给警告, 避免误配置静默无预算或把 0 当「零预算」)
+  const budgetDir = args['budget-dir'];
+  const budgetLimit = args['budget-limit'] !== undefined ? Number(args['budget-limit']) : NaN;
+  let budget;
+  if (budgetDir !== undefined || args['budget-limit'] !== undefined) {
+    if (budgetDir === undefined || args['budget-limit'] === undefined || !Number.isFinite(budgetLimit) || budgetLimit <= 0) {
+      console.warn('warn: --budget-dir and --budget-limit (> 0) must both be given; budget disabled');
+    } else {
+      budget = { dir: path.resolve(budgetDir), limitUsd: budgetLimit };
+    }
+  }
+  const controller = new EvolutionController({ registry, auditDir, ...(budget ? { budget } : {}) });
 
   // 1. current 内容
   const { files: currentContent, current } = await currentFiles(registry, logicalId);
