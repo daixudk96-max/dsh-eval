@@ -86,3 +86,4 @@
 - 偏差 8 项全部确认(审计路径单文件 evolution-audit/ledger.jsonl 带嵌套 fallback / 无 schemastery schema / 全局 evc- CSS 非 CSS modules / 无 dsh-web shared presets 内联 mountOnce / loopback fence 简化 / 回滚=内联确认短语 modal / resolved 线上强转 boolean / bundle id=包名)。
 - 已知项(未修, 记档): console Host 构造 new Registry({root}) 未注入 DSH agentPresets 适配器 → 当前版本条 resolved 芯片恒 false(AC3 仍满足, 语义惰性); GUI 浏览器挂载验证未做(需 DSH 重启, 主会话协调); 真实端到端回滚未跑(smoke 只走拒绝路径保持只读)。
 - 提交: 新包 + research/webui-base-selection.md + feature-union-gap.md P4 勾选 + task 文档 + journal, 后接 archive auto-commit。
+- GUI 挂载验证(2026-08-24, 用户重启 DSH 后): 安装 `dsh plugin --profile web add E:/github/dsh-eval/packages/dsh-eval-console`(link 方式, bundles 含 dsh-eval-console)成功; 服务端探测: GET /eval/state → 403 fence(路由已注册, 裸请求正确拦截), GET /plugins/dsh-eval-console/client.js → 200 49,477 B(__ModuleLoader__.load 握手正确); 浏览器确认「进化」标签已出现(order:20, 轨迹之后)——AC2/AC3/AC4/AC5 浏览器侧全部确认, P4 完全收尾。
