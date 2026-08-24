@@ -48,3 +48,15 @@
 - parseArgs 无值 flag 会吞下一个参数(--auto --benchmark → benchmark 丢失), 修: 下一 token 以 -- 开头视为无值。
 - readme-me 初版 README.md 既当任务说明又当交付物 → 改 TASK.md 分离。
 - fixtures 风格不一致(CJS module.exports vs ESM import)会直接 SyntaxError → 统一 ESM。
+
+## 2026-08-23 P0 可观察 Judge + Overfit + Frozen + Archive(08-23-feat-08-23-p0-judge-overfit-frozen, 已归档)
+
+- **P0-1 可观察 Judge**(commit e6047f2):
+  - 根因链: eval profile 下 dsh-base patch 层含 llm 插件行 → ctx.get('llm') 非 undefined → 走 dsh-llm stream 路径; 但 llmJudgeChat(llm.stream) 解构方法丢失 this → 'Cannot read properties of undefined (reading streamWithRegistration)' → tryJudgeTrial 静默 null。
+  - 修复: resolveJudgeChat 用 llm.stream.bind(llm); buildJudgePrompt 加 'Respond with ONLY that JSON object. No markdown fences. No commentary. No other fields.'(deepseek-v4-flash 原不遵守 STRICT JSON, 返回 {success:false,...}); judge.baseUrl/apiKeyEnv 字段 + createHttpJudgeChat 直连 fallback(组合无 llm 服务时); resolveJudgeApiKey(env → ~/.dsh/.credentials.yaml)。
+  - 真实验证: fix-multiply-judge-benchmark.yaml → finalAnswerScore 8.0, hallucination true, rationale 完整(run-p0-judge-fm-2026-08-23.json)。
+- **P0-2 Overfit**(lib/overfit.js): 四规则 delta 扫描(digest 精确/statement≥40/case_id: <id> id≥8/privateRubric≥20), 只扫候选新增行; controller.createCandidate 在 staging 前检查, 失败只记结构化 findings 并 throw。测试 9+3。
+- **P0-3 Frozen Epoch**: benchmark frozen+materials schema, 语义 digest(canonical JSON SHA-256, 覆盖全量 case 使 dev/guard 共享 epoch), 运行结束重载 sourcePath 验证, 漂移 → status invalid + aggregate/grading null + epochChanged; dsh-evolve epochSameOf 双 run 判定。测试 6+3。
+- **P0-4 Archive**: registry.exportSnapshot/importSnapshot(自校验 JSON 包: 路径安全/逐文件 hash/package digest/revision manifest/pointer 引用; 临时 sibling + rename); dsh-evolve --export/--import(拒绝不兼容 flag)。真实往返: 139 文件 23 revisions, 指针/历史/digest 全保留。测试 6。
+- 全量: dsh-eval 186/186 vitest + typecheck 0; evolution-controller 13 文件 node:test 全绿。
+- 踩坑: ①prepare-sdk 要求 DSH HEAD == pinned 70195e98, 本地扩展 commit 2db2fa3f 需临时 checkout 跑完恢复; ②loadBenchmark 的 benchmark command 为空数组, frozen 测试需传 command 覆盖; ③exactOptionalPropertyTypes 下 Map.get 不窄化, 需局部变量; ④clipa 服务 down 时评测 TRANSPORT 失败(用户重启后恢复); ⑤evaluate-preset-rubric 任务 agent 陷入重建 DSH_HOME 兔子洞超时, 换 fix-multiply 稳定验证。
