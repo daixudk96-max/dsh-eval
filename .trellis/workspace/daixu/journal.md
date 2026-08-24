@@ -93,3 +93,9 @@
 - 关键发现: BudgetLedger 语义 limitUsd <= 0 = 无限(P2 约定); CLI 传 0 会静默变无限 → CLI 要求 limit > 0 才启用, ≤0/单侧给警告禁用。
 - 预算拒绝验证方式: 预置 ledger spend 记录(limit 0.01 + spend 0.01) → newRun remaining=0 → 'evolution budget exhausted (remaining 0 USD)' + exit 1(多轮场景: 上一轮花光本轮拒)。
 - AC1-AC4 全达成: --status 真实 registry 输出 evaluate/system-evaluator/system-evolver 三链无假 id; registry 9/9; evolution-controller 22 文件全绿。
+
+## 2026-08-25 ucb-air(方向1)完成 — commit 多候选并行闭环
+- 任务 08-25-ucb-air: lib/ucb.js(shouldExpand (N+P_eval)^alpha>=T alpha=0.6 忠实上游 specs/03 §7 + 首波约定; ucbScore mean+sqrt(2ln(totalN+1)/n)) + proposer.proposeMultiple(W_p≤3 互异假设、carbon-copy 去重重问、LLM 瞬时失败重试≤2 次 backoff、非重试拒绝立即返回、partial 诚实返回) + dsh-evolve --candidates n(仅 --auto; 每候选独立 run; 并行评测并发≤2 Promise.allSettled; 评测前 canAfford 预算检查→budget-blocked; 选择=唯一 ACCEPTED 或最高 gain+effGain; --approve promote)。
+- 真实闭环(临时 registry 复制品): 2 互异假设(都针对 ask-user 交互阻塞, 一个说 persona 硬编码路径+交互选择, 一个说 ask-user 工具本身)→ 并行评测 → 候选0 4步 effGain 0.2 PASS / 候选1 5步 INCONCLUSIVE → pick 候选0 → promote evaluate-66e3b543(approval user-approved-ucb-air-2026-08-25)。
+- 踩坑: ①clipa 并发请求互相抢占导致 LLM 300s 超时/ fetch failed——LLM 调用必须串行, 测试时勿并发; ②单候选 --auto 分支在多候选时也执行(浪费一次 LLM 调用)→ 包 candidateCount===1 修复; ③预算耗尽拒绝后 Node 24 Windows libuv 断言(UV_HANDLE_CLOSING, exit 0xC0000409)——proposer fetch 连接未清理的退出竞态, 功能正确, 记录不深挖; ④本环境评测 costUsd=0(pricing null), 预算只能在 newRun 层耗尽, budget-blocked 分支代码就位但真实评测中不可达(如实记录)。
+- 测试: ucb 10 + proposer-multi 9 + proposer 8 + 全量回归无失败。
