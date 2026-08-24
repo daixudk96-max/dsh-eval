@@ -1,0 +1,12 @@
+{
+  "title": "P2: 进化治理增强(逆编辑回滚/威胁扫描/failures/decisionReport)",
+  "status": "completed",
+  "work": {
+    "type": "feat",
+    "mode": "standard",
+    "stage": "prd",
+    "execution_lane": "standard"
+  },
+  "description": "差距清单 P2: 确定性逆编辑回滚(autoRollbackOnReject)、partial 回滚冲突检测、写前威胁扫描(prompt-injection/exfiltration/secret)、failures 失败类聚合命令、decisionReport 逐 case delta。排期: P1 完成后实施。",
+  "completedAt": "2026-08-24"
+}
