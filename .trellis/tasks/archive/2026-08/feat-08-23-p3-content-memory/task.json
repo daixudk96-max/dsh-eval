@@ -1,0 +1,12 @@
+{
+  "title": "P3: 内容/记忆域(skill 提炼/harness state 四类/热挂载/记忆文件)",
+  "status": "completed",
+  "work": {
+    "type": "feat",
+    "mode": "standard",
+    "stage": "prd",
+    "execution_lane": "standard"
+  },
+  "description": "差距清单 P3: skill 沉淀提炼(session→SKILL.md)、harness state 四类版本化(prompt/memory/skill/subagent)、skill 生命周期 active→stale→archived+restore、热挂载(skill→live 插件)、MEMORY.md/USER.md 记忆文件、ranked injection。排期: P2 完成后实施; 量大可拆分。",
+  "completedAt": "2026-08-24"
+}
