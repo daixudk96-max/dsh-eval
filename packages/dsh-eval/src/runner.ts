@@ -30,6 +30,7 @@ import type { EvalGrade, EvalRunGrading } from './types.ts'
 import { tryJudgeTrial, type JudgeChat } from './judge.ts'
 import { aggregateMetrics, computeMetrics } from './metrics.ts'
 import { findSessionLogs, loadTrace, mergeTraces } from './trace.ts'
+import { loadBenchmark } from './benchmark.ts'
 
 /** Cap per-stream child output so a runaway trial cannot exhaust memory. */
 const MAX_OUTPUT_BYTES = 512 * 1024
@@ -492,6 +493,47 @@ export async function runBenchmark(benchmark: Benchmark, options: RunOptions = {
     (result): result is EvalTrialResult & { metrics: NonNullable<EvalTrialResult['metrics']> } =>
       result.status === 'completed' && result.metrics !== undefined,
   )
+  // Frozen epoch verification: reload the benchmark document and recompute the
+  // semantic digest after the full case x trial loop. Drift (materials or
+  // config changed mid-run) invalidates the run: trial evidence is preserved
+  // but aggregate/grading are nulled so no candidate gate can consume a
+  // partial score. Non-frozen runs record the snapshot without invalidating.
+  let status: 'completed' | 'invalid' = 'completed'
+  let epochChanged = false
+  let verified = true
+  let observedDigest = benchmark.benchmarkDigest
+  let mismatches: Array<{ path: string; expected?: string; observed?: string }> = []
+  let notes: string[] | undefined
+  if (benchmark.frozen) {
+    try {
+      const reloaded = await loadBenchmark(benchmark.sourcePath)
+      observedDigest = reloaded.benchmarkDigest
+      if (observedDigest !== benchmark.benchmarkDigest) {
+        verified = false
+        epochChanged = true
+        status = 'invalid'
+        const expected = new Map(benchmark.materials.map(m => [m.path, m.sha256]))
+        const observed = new Map(reloaded.materials.map(m => [m.path, m.sha256]))
+        for (const materialPath of new Set([...expected.keys(), ...observed.keys()])) {
+          const expectedHash = expected.get(materialPath)
+          const observedHash = observed.get(materialPath)
+          if (expectedHash !== observedHash) {
+            mismatches.push({
+              path: materialPath,
+              ...(expectedHash !== undefined ? { expected: expectedHash } : {}),
+              ...(observedHash !== undefined ? { observed: observedHash } : {}),
+            })
+          }
+        }
+        notes = ['frozen benchmark drifted during the run (epoch changed)']
+      }
+    } catch (error) {
+      verified = false
+      epochChanged = true
+      status = 'invalid'
+      notes = [`frozen benchmark reload failed: ${message(error)}`]
+    }
+  }
   return {
     benchmark: benchmark.name,
     model: benchmark.model,
@@ -507,7 +549,13 @@ export async function runBenchmark(benchmark: Benchmark, options: RunOptions = {
     tempRoot: root,
     split: options.split ?? 'dev',
     cases: results,
-    aggregate: aggregateMetrics(completed.map(result => result.metrics)),
-    grading: gradingOf(completed),
+    aggregate: status === 'invalid' ? null : aggregateMetrics(completed.map(result => result.metrics)),
+    grading: status === 'invalid' ? null : gradingOf(completed),
+    ...(status !== 'completed' ? { status } : {}),
+    benchmarkDigest: benchmark.benchmarkDigest,
+    caseHashes: benchmark.caseHashes,
+    benchmarkSnapshot: { frozen: benchmark.frozen, observedDigest, verified, mismatches },
+    ...(epochChanged ? { epochChanged } : {}),
+    ...(notes !== undefined ? { notes } : {}),
   }
 }

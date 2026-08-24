@@ -1,0 +1,33 @@
+name: fix-multiply-judge
+# P0-1 验证: 内嵌 LLM judge 真实执行(HTTP fallback)。
+# 任务同 fix-multiply-short(agent 稳定 ~23s 完成), 但配置 judge.baseUrl:
+# eval profile bundle 无 `llm` 服务, judge 走直连 OpenAI 兼容端点打分。
+provider: clipa
+model: deepseek-v4-flash
+profile: headless
+trials: 1
+timeoutMs: 180000
+seed: 42
+judge:
+  provider: clipa
+  model: deepseek-v4-flash
+  maxScore: 10
+  baseUrl: http://127.0.0.1:8317/v1
+  apiKeyEnv: CLIPA_API_KEY
+  rubricText: |
+    Score the agent's final answer on a 0-10 scale: (1) correctness of the
+    fix (multiply(a, b) returns a * b), (2) whether tests were run until PASS,
+    (3) whether ANSWER.md explains the fix. Report each dimension in the
+    rationale.
+cases:
+  - id: fix-multiply
+    split: dev
+    prompt: |
+      Fix the bug in this small JavaScript project (see README.md).
+      Requirements: fix src/multiply.js so multiply(a, b) returns a * b,
+      run `node tests/run.js` until it prints PASS, and write ANSWER.md
+      with a short explanation. Do not modify check.js or tests/run.js.
+    workspace: E:\github\dsh-eval\eval\benchmarks\fix-multiply
+    expected:
+      tool: read
+      check: node check.js

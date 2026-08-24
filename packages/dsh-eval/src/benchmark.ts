@@ -13,8 +13,9 @@
  * @module dsh-eval/benchmark
  */
 
-import { readFile } from 'node:fs/promises'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { createHash } from 'node:crypto'
+import { readFile, realpath } from 'node:fs/promises'
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { load } from 'js-yaml'
 import { z } from 'zod'
 import { decryptRubric, resolveRubricKey, type RubricKeyOptions } from './rubric.ts'
@@ -27,6 +28,8 @@ const judgeSchema = z.object({
   rubricText: z.string().min(1).optional(),
   rubricCipher: z.string().min(1).optional(),
   maxScore: z.number().int().positive().default(10),
+  baseUrl: z.string().min(1).optional(),
+  apiKeyEnv: z.string().min(1).optional(),
 }).strict().refine(
   judge => [judge.rubric, judge.rubricText, judge.rubricCipher].filter(v => v !== undefined).length <= 1,
   { message: 'judge accepts at most one of rubric, rubricText, rubricCipher' },
@@ -75,7 +78,53 @@ const benchmarkSchema = z.object({
   pricing: z.record(z.string().min(1), pricingSchema).optional(),
   judge: judgeSchema.optional(),
   replay: replaySchema.optional(),
+  frozen: z.boolean().default(false),
+  materials: z.array(z.string().min(1)).optional(),
 }).strict()
+
+/** Canonical JSON for semantic hashing: stable key order, no whitespace. */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  const keys = Object.keys(value as Record<string, unknown>).sort()
+  return `{${keys.map(k => `${JSON.stringify(k)}:${canonicalJson((value as Record<string, unknown>)[k])}`).join(',')}}`
+}
+
+/** SHA-256 hex of a string. */
+function sha256Hex(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex')
+}
+
+/**
+ * Resolve the explicit material manifest: every entry must be a regular file
+ * contained by the benchmark directory (no `..`, no symlink escape, no
+ * directory expansion). Bytes are hashed at load time.
+ * @param entries - the raw `materials` list from the document.
+ * @param baseDir - absolute benchmark directory.
+ * @returns the normalized manifest.
+ */
+async function resolveMaterials(
+  entries: readonly string[] | undefined,
+  baseDir: string,
+): Promise<{ path: string; sha256: string }[]> {
+  if (entries === undefined || entries.length === 0) return []
+  const baseReal = await realpath(baseDir)
+  const manifest: { path: string; sha256: string }[] = []
+  for (const entry of entries) {
+    const absolute = resolve(baseDir, entry)
+    const rel = relative(baseReal, absolute)
+    if (rel.startsWith(`..${sep}`) || rel === '..' || isAbsolute(rel)) {
+      throw new Error(`benchmark material escapes the benchmark directory: ${entry}`)
+    }
+    const real = await realpath(absolute)
+    if (real !== absolute && !real.startsWith(`${baseReal}${sep}`)) {
+      throw new Error(`benchmark material escapes via symlink: ${entry}`)
+    }
+    const bytes = await readFile(absolute)
+    manifest.push({ path: entry, sha256: sha256Hex(bytes.toString('utf8')) })
+  }
+  return manifest
+}
 
 /**
  * Resolve one parsed case's prompt and workspace against the benchmark
@@ -130,13 +179,11 @@ export async function parseBenchmark(
     throw new Error('benchmark document must be a YAML mapping')
   }
   const parsed = benchmarkSchema.parse(value)
-  const cases: BenchmarkCase[] = []
+  // Resolve EVERY case first (unfiltered): the semantic digest must cover the
+  // full benchmark so dev and guard runs share one epoch identity.
+  const allCases: BenchmarkCase[] = []
   for (const caseValue of parsed.cases) {
-    if (splitFilter !== undefined && caseValue.split !== splitFilter) continue
-    cases.push(await resolveCase(caseValue, baseDir))
-  }
-  if (splitFilter !== undefined && cases.length === 0) {
-    throw new Error(`benchmark has no cases in split "${splitFilter}"`)
+    allCases.push(await resolveCase(caseValue, baseDir))
   }
   const pricing = parsed.pricing
   let judge = parsed.judge
@@ -149,6 +196,34 @@ export async function parseBenchmark(
   else if (judge !== undefined && judge.rubricText !== undefined && judge.rubric === undefined) {
     const { rubricText: _text, ...rest } = judge
     judge = { ...rest, rubric: judge.rubricText }
+  }
+  const rubricHash = judge?.rubric !== undefined ? sha256Hex(judge.rubric) : null
+  // Per-case semantic hashes: case fields + the benchmark-level rubric hash.
+  const caseHashes: Record<string, string> = {}
+  for (const c of allCases) {
+    caseHashes[c.id] = sha256Hex(canonicalJson({
+      id: c.id,
+      split: c.split ?? 'dev',
+      prompt: c.prompt,
+      expected: c.expected ?? null,
+      rubricHash,
+    }))
+  }
+  const materials = await resolveMaterials(parsed.materials, baseDir)
+  const benchmarkDigest = sha256Hex(canonicalJson({
+    name: parsed.name,
+    caseOrder: allCases.map(c => c.id),
+    caseHashes,
+    judge: judge === undefined
+      ? null
+      : { provider: judge.provider ?? '', model: judge.model ?? parsed.model, maxScore: judge.maxScore, rubricHash },
+    materials,
+  }))
+  const cases = splitFilter === undefined
+    ? allCases
+    : allCases.filter(c => (c.split ?? 'dev') === splitFilter)
+  if (splitFilter !== undefined && cases.length === 0) {
+    throw new Error(`benchmark has no cases in split "${splitFilter}"`)
   }
   const replay = parsed.replay
   return {
@@ -164,12 +239,17 @@ export async function parseBenchmark(
     cases,
     ...(pricing !== undefined ? { pricing } : {}),
     ...(judge !== undefined
-      ? { judge: { provider: judge.provider ?? '', model: judge.model ?? parsed.model, ...(judge.rubric !== undefined ? { rubric: judge.rubric } : {}), ...(judge.rubricText !== undefined ? { rubricText: judge.rubricText } : {}), maxScore: judge.maxScore } }
+      ? { judge: { provider: judge.provider ?? '', model: judge.model ?? parsed.model, ...(judge.rubric !== undefined ? { rubric: judge.rubric } : {}), ...(judge.rubricText !== undefined ? { rubricText: judge.rubricText } : {}), maxScore: judge.maxScore, ...(judge.baseUrl !== undefined ? { baseUrl: judge.baseUrl } : {}), ...(judge.apiKeyEnv !== undefined ? { apiKeyEnv: judge.apiKeyEnv } : {}) } }
       : {}),
     ...(replay !== undefined
       ? { replay: { dir: isAbsolute(replay.dir) ? replay.dir : resolve(baseDir, replay.dir) } }
       : {}),
     baseDir,
+    sourcePath: '',
+    frozen: parsed.frozen,
+    benchmarkDigest,
+    caseHashes,
+    materials,
   }
 }
 
@@ -186,5 +266,6 @@ export async function loadBenchmark(
   splitFilter?: BenchmarkSplit,
 ): Promise<Benchmark> {
   const absolute = resolve(path)
-  return parseBenchmark(await readFile(absolute, 'utf8'), dirname(absolute), opts, splitFilter)
+  const benchmark = await parseBenchmark(await readFile(absolute, 'utf8'), dirname(absolute), opts, splitFilter)
+  return { ...benchmark, sourcePath: absolute }
 }

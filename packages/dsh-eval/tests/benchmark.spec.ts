@@ -153,6 +153,43 @@ describe('dsh-eval benchmark loading', () => {
     expect(benchmark.judge).toEqual({ provider: 'other', model: 'judge-x', maxScore: 10 })
   })
 
+  it('keeps the judge http fallback fields', async () => {
+    const benchmark = await parseBenchmark([
+      'name: judged',
+      'model: deepseek-v4',
+      'judge:',
+      '  provider: clipa',
+      '  model: judge-x',
+      '  baseUrl: http://127.0.0.1:8317/v1',
+      '  apiKeyEnv: CLIPA_API_KEY',
+      'cases:',
+      '  - id: a',
+      '    prompt: p',
+      '',
+    ].join('\n'), tempDir())
+    expect(benchmark.judge).toEqual({
+      provider: 'clipa',
+      model: 'judge-x',
+      maxScore: 10,
+      baseUrl: 'http://127.0.0.1:8317/v1',
+      apiKeyEnv: 'CLIPA_API_KEY',
+    })
+  })
+
+  it('rejects an unknown judge field', async () => {
+    await expect(parseBenchmark([
+      'name: judged',
+      'model: m',
+      'judge:',
+      '  maxScore: 10',
+      '  unknownField: x',
+      'cases:',
+      '  - id: a',
+      '    prompt: p',
+      '',
+    ].join('\n'), tempDir())).rejects.toThrow()
+  })
+
   it('rejects an invalid judge maxScore', async () => {
     await expect(parseBenchmark([
       'name: judged',
@@ -297,5 +334,95 @@ describe('dsh-eval benchmark loading', () => {
     ].join('\n'))
     const guard = await loadBenchmark(join(dir, 'split.yml'), {}, 'guard')
     expect(guard.cases.map(caseValue => caseValue.id)).toEqual(['guard-case'])
+  })
+
+  it('parses frozen and materials with a stable semantic digest', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'm.txt'), 'material bytes')
+    const document = [
+      'name: frozen-doc',
+      'model: m',
+      'frozen: true',
+      'materials:',
+      '  - m.txt',
+      'cases:',
+      '  - id: a',
+      '    prompt: p',
+      '',
+    ].join('\n')
+    const first = await parseBenchmark(document, dir)
+    const second = await parseBenchmark(document, dir)
+    expect(first.frozen).toBe(true)
+    expect(first.materials).toEqual([{ path: 'm.txt', sha256: expect.stringMatching(/^[0-9a-f]{64}$/) }])
+    expect(first.benchmarkDigest).toMatch(/^[0-9a-f]{64}$/)
+    expect(first.caseHashes.a).toMatch(/^[0-9a-f]{64}$/)
+    // Deterministic: same document + same material bytes → same digest.
+    expect(second.benchmarkDigest).toBe(first.benchmarkDigest)
+    // The digest covers the full case set, not the split-filtered subset.
+    const dev = await parseBenchmark(document, dir, {}, 'dev')
+    expect(dev.benchmarkDigest).toBe(first.benchmarkDigest)
+  })
+
+  it('changes the digest when a material changes', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'm.txt'), 'version A')
+    const document = [
+      'name: frozen-doc',
+      'model: m',
+      'frozen: true',
+      'materials:',
+      '  - m.txt',
+      'cases:',
+      '  - id: a',
+      '    prompt: p',
+      '',
+    ].join('\n')
+    const before = await parseBenchmark(document, dir)
+    writeFileSync(join(dir, 'm.txt'), 'version B')
+    const after = await parseBenchmark(document, dir)
+    expect(after.benchmarkDigest).not.toBe(before.benchmarkDigest)
+  })
+
+  it('rejects a material that escapes the benchmark directory', async () => {
+    const dir = tempDir()
+    await expect(parseBenchmark([
+      'name: escape',
+      'model: m',
+      'materials:',
+      '  - ../outside.txt',
+      'cases:',
+      '  - id: a',
+      '    prompt: p',
+      '',
+    ].join('\n'), dir)).rejects.toThrow('escapes the benchmark directory')
+  })
+
+  it('defaults frozen to false with an empty material manifest', async () => {
+    const benchmark = await parseBenchmark([
+      'name: plain',
+      'model: m',
+      'cases:',
+      '  - id: a',
+      '    prompt: p',
+      '',
+    ].join('\n'), tempDir())
+    expect(benchmark.frozen).toBe(false)
+    expect(benchmark.materials).toEqual([])
+    expect(benchmark.benchmarkDigest).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('loadBenchmark records the source path for frozen re-verification', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'frozen.yml'), [
+      'name: frozen-file',
+      'model: m',
+      'frozen: true',
+      'cases:',
+      '  - id: a',
+      '    prompt: p',
+      '',
+    ].join('\n'))
+    const benchmark = await loadBenchmark(join(dir, 'frozen.yml'))
+    expect(benchmark.sourcePath).toBe(join(dir, 'frozen.yml'))
   })
 })

@@ -3,6 +3,7 @@ const { appendLedger } = require('./fs-store');
 const { assertTransition } = require('./state-machine');
 const { evaluateGate } = require('./gate');
 const { proposalCheck, normalizeFiles } = require('./proposal-check');
+const { inspectOverfit } = require('./overfit');
 const { BudgetLedger } = require('./budget');
 const { nearDuplicate, contentHash } = require('./near-dup');
 const { redactReviewText } = require('./redact');
@@ -91,10 +92,13 @@ class EvolutionController {
    * @param {() => Promise<Record<string,string>>} [args.readCandidateFiles] - reads the
    *   staged candidate content files; defaults to registry.revisionContent on the
    *   staged source revision (no adapter) — callers writing real files must supply it.
+   * @param {object|null} [args.benchmarkMeta] - in-memory benchmark corpus for the
+   *   overfit check: { benchmarkDigest, cases: [{ id, statement, privateRubric? }] }.
+   *   Omitted = no corpus (legacy callers, check skipped). Never persisted.
    */
   async createCandidate(runId, {
     logicalId, sourceRevisionId, hypothesis, evidence = [], mutations = [],
-    readCandidateFiles,
+    readCandidateFiles, benchmarkMeta,
   }) {
     const run = this._require(runId);
     assertTransition(run.state, 'SEALED'); // candidate-created is within DRAFT flow
@@ -111,6 +115,23 @@ class EvolutionController {
     if (!check.ok) {
       await this._audit({ runId, event: 'proposal-rejected', reasons: check.reasons });
       throw new Error(`proposal rejected: ${check.reasons.join('; ')}`);
+    }
+    // --- overfit / contamination check (before any staging write) ---
+    if (benchmarkMeta !== null && benchmarkMeta !== undefined) {
+      const overfit = inspectOverfit({
+        sourceFiles: sourceContent.files ?? {},
+        candidateFiles,
+        benchmarkMeta,
+      });
+      if (!overfit.ok) {
+        const findings = overfit.findings.map((f) => ({
+          code: f.code, kind: f.kind,
+          ...(f.caseId !== undefined ? { caseId: f.caseId } : {}),
+          ...(f.path !== undefined ? { path: f.path } : {}),
+        }));
+        await this._audit({ runId, event: 'proposal-rejected', overfit: findings });
+        throw new Error(`proposal rejected: benchmark overfit (${findings.map((f) => f.code).join(', ')})`);
+      }
     }
     const candidateId = await this.registry.createCandidate(logicalId, { sourceRevisionId, evolutionRunId: runId });
     for (const m of mutations) await this.registry.patchCandidate(candidateId, m);

@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   buildJudgePrompt,
+  createHttpJudgeChat,
   judgeTrial,
   llmJudgeChat,
   parseJudgeVerdict,
+  resolveJudgeApiKey,
   summarizeTrace,
 } from '../src/judge.ts'
 import { parseSessionLog } from '../src/trace.ts'
@@ -160,5 +165,74 @@ describe('dsh-eval judge', () => {
       prompt: 'task',
     })
     expect(parseJudgeVerdict(reply, 10)).toEqual({ finalAnswerScore: 5, hallucination: false })
+  })
+
+  it('calls the OpenAI-compatible endpoint through the http seam', async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = []
+    const fakeFetch = async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} })
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"finalAnswerScore": 8, "hallucination": false}' } }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    const chat = createHttpJudgeChat(
+      { baseUrl: 'http://127.0.0.1:8317/v1/', apiKey: 'k', model: 'judge-m' },
+      fakeFetch as typeof fetch,
+    )
+    const reply = await chat({ provider: 'clipa', model: 'judge-m', system: 'judge', prompt: 'task' })
+    expect(parseJudgeVerdict(reply, 10)).toEqual({ finalAnswerScore: 8, hallucination: false })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.url).toBe('http://127.0.0.1:8317/v1/chat/completions')
+    const body = JSON.parse(String(calls[0]!.init.body)) as {
+      model: string
+      temperature: number
+      messages: Array<{ role: string; content: string }>
+    }
+    expect(body.model).toBe('judge-m')
+    expect(body.temperature).toBe(0)
+    expect(body.messages[0]).toEqual({ role: 'system', content: 'judge' })
+    expect(body.messages[1]).toEqual({ role: 'user', content: 'task' })
+    expect((calls[0]!.init.headers as Record<string, string>).authorization).toBe('Bearer k')
+  })
+
+  it('fails loudly on a non-2xx judge http response', async () => {
+    const fakeFetch = async () => new Response('rate limited', { status: 429 })
+    const chat = createHttpJudgeChat(
+      { baseUrl: 'http://x/v1', apiKey: '', model: 'm' },
+      fakeFetch as typeof fetch,
+    )
+    await expect(chat({ provider: 'p', model: 'm', system: 's', prompt: 't' })).rejects.toThrow('judge http 429')
+  })
+
+  it('fails loudly when the completion carries no text content', async () => {
+    const fakeFetch = async () => new Response(JSON.stringify({ choices: [] }), { status: 200 })
+    const chat = createHttpJudgeChat(
+      { baseUrl: 'http://x/v1', apiKey: '', model: 'm' },
+      fakeFetch as typeof fetch,
+    )
+    await expect(chat({ provider: 'p', model: 'm', system: 's', prompt: 't' })).rejects.toThrow('no text content')
+  })
+
+  it('resolves the judge api key from the environment first', () => {
+    const home = mkdtempSync(join(tmpdir(), 'judge-key-'))
+    process.env.DSH_EVAL_TEST_KEY = 'from-env'
+    try {
+      expect(resolveJudgeApiKey('DSH_EVAL_TEST_KEY', home)).toBe('from-env')
+    } finally {
+      delete process.env.DSH_EVAL_TEST_KEY
+    }
+  })
+
+  it('falls back to the credentials file', () => {
+    const home = mkdtempSync(join(tmpdir(), 'judge-key-'))
+    mkdirSync(join(home, '.dsh'), { recursive: true })
+    writeFileSync(join(home, '.dsh', '.credentials.yaml'), 'CLIPA_API_KEY: dai123456\nOTHER: x\n')
+    expect(resolveJudgeApiKey('CLIPA_API_KEY', home)).toBe('dai123456')
+  })
+
+  it('returns undefined when no source yields the key', () => {
+    const home = mkdtempSync(join(tmpdir(), 'judge-key-'))
+    expect(resolveJudgeApiKey('DSH_EVAL_MISSING_KEY', home)).toBeUndefined()
   })
 })

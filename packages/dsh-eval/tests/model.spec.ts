@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { readEvalDefaults, resolveModelSelection, EVAL_DEFAULTS_NS } from '../src/model.ts'
-import type { Benchmark } from '../src/types.ts'
+import { readEvalDefaults, resolveModelSelection, resolveJudge, EVAL_DEFAULTS_NS } from '../src/model.ts'
+import type { Benchmark, BenchmarkJudge } from '../src/types.ts'
 
 const agentDefaultModel = {
   currentSelection: () => ({ provider: 'main-provider', model: 'main-model', reasoningEffort: 'medium' }),
@@ -62,5 +62,31 @@ describe('dsh-eval readEvalDefaults', () => {
     expect(readEvalDefaults(undefined)).toEqual({})
     expect(readEvalDefaults(settingsWith(null))).toEqual({})
     expect(readEvalDefaults(settingsWith('junk'))).toEqual({})
+  })
+})
+
+describe('dsh-eval resolveJudge', () => {
+  const selection = { provider: 'main-provider', model: 'main-model' }
+
+  it('defaults provider/model to the effective selection', () => {
+    const judge = { provider: '', model: undefined, maxScore: 10 } as unknown as BenchmarkJudge
+    expect(resolveJudge({ judge } as unknown as Pick<Benchmark, 'judge'>, selection))
+      .toEqual({ provider: 'main-provider', model: 'main-model', maxScore: 10 })
+  })
+
+  it('keeps explicit provider, model, rubric, and the http fallback fields', () => {
+    const judge = {
+      provider: 'clipa',
+      model: 'judge-x',
+      maxScore: 10,
+      rubric: 'Be strict.',
+      baseUrl: 'http://127.0.0.1:8317/v1',
+      apiKeyEnv: 'CLIPA_API_KEY',
+    } as unknown as BenchmarkJudge
+    expect(resolveJudge({ judge } as unknown as Pick<Benchmark, 'judge'>, selection)).toEqual(judge)
+  })
+
+  it('returns undefined when no judge is configured', () => {
+    expect(resolveJudge({} as unknown as Pick<Benchmark, 'judge'>, selection)).toBeUndefined()
   })
 })

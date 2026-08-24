@@ -74,6 +74,10 @@ function usage() {
   --dsh <launcher>       默认: node E:\\github\\dsh\\apps\\cli\\lib\\bin.js
   --out <dir>            默认 ./evolve-out, 写 baseline.json/candidate.json/gate.json/result.json
 
+归档模式(不启动评测, 只要求 --registry):
+  --export <path>        导出整个 registry 为自校验 JSON 快照
+  --import <path>        从快照导入到 --registry 根(目标须不存在或为空)
+
 闭环: current → 候选 → seal → 评测×2 → Gate → promote/拒绝(退出码 1 拒绝)`);
 }
 
@@ -106,6 +110,30 @@ function evalEvidence(run) {
   };
 }
 
+/** 从 dsh-eval run.json 提取 frozen epoch 证据(P0-3)。 */
+function epochEvidence(run) {
+  const snapshot = run.benchmarkSnapshot || {};
+  return {
+    status: run.status ?? 'completed',
+    digest: typeof run.benchmarkDigest === 'string' ? run.benchmarkDigest : null,
+    verified: snapshot.verified ?? true,
+    epochChanged: run.epochChanged ?? false,
+  };
+}
+
+/**
+ * epochSame = 双 run 均 completed + frozen 快照验证成功 + 语义 digest 一致。
+ * 任一 run invalid/未验证/digest 缺失或不同 → false → gate 在效果/效率
+ * INCONCLUSIVE 之前返回 INVALID(冻结 epoch 内才允许比较)。
+ */
+function epochSameOf(baselineRun, candidateRun) {
+  const b = epochEvidence(baselineRun);
+  const c = epochEvidence(candidateRun);
+  return b.status === 'completed' && c.status === 'completed'
+    && b.verified && c.verified
+    && b.digest !== null && b.digest === c.digest;
+}
+
 /** 读目录为 {relPath: text}(候选内容)。 */
 function readDirAsFiles(dir) {
   const files = {};
@@ -134,6 +162,31 @@ async function currentFiles(registry, logicalId) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { usage(); return; }
+
+  // ---- archive modes (P0-4): --export / --import, no evolution flags ----
+  if (args.export || args.import) {
+    if (!args.registry) { console.error('error: --registry is required for --export/--import'); process.exit(2); }
+    const incompatible = ['benchmark', 'logical', 'candidate', 'auto', 'approve', 'split', 'min-effect', 'dsh',
+      'benchmark-baseline', 'benchmark-candidate', 'proposal-run', 'model', 'api-key-env', 'redact-value'];
+    for (const flag of incompatible) {
+      if (args[flag] !== undefined) {
+        console.error(`error: --${flag} is incompatible with --export/--import`);
+        process.exit(2);
+      }
+    }
+    const registry = new Registry({ root: args.registry });
+    if (args.export) {
+      const outPath = path.resolve(args.export);
+      const result = await registry.exportSnapshot(outPath);
+      console.log(`✓ exported ${result.fileCount} files → ${outPath} (digest ${result.packageDigest.slice(0, 12)}…)`);
+      return;
+    }
+    const inPath = path.resolve(args.import);
+    const result = await Registry.importSnapshot({ root: args.registry, inPath });
+    console.log(`✓ imported ${result.imported} files → ${args.registry} (${result.revisions.length} revisions)`);
+    return;
+  }
+
   for (const required of ['benchmark', 'registry', 'logical']) {
     if (!args[required]) { usage(); console.error(`error: --${required} is required`); process.exit(2); }
   }
@@ -223,14 +276,15 @@ async function main() {
   const candidate = evalEvidence(candidateRun);
   console.log(`candidate: ${JSON.stringify(candidate)}`);
 
-  // 5. Code Gate
-  const gateOverrides = { minEffect };
+  // 5. Code Gate(frozen epoch 校验: 双 run 同 epoch 才允许比较)
+  const epochSame = epochSameOf(baselineRun, candidateRun);
+  const gateOverrides = { minEffect, ...(epochSame ? {} : { epochSame: false }) };
   const result = await controller.evaluate(run.id, {
     baseline: { overall: baseline.overall, correctness: baseline.correctness, safety: baseline.safety, verification: baseline.verification, steps: baseline.steps },
     candidate: { overall: candidate.overall, correctness: candidate.correctness, safety: candidate.safety, verification: candidate.verification, steps: candidate.steps },
     gateOverrides,
   });
-  console.log(`gate: ${result.decision} — ${result.gateResult.reason}`);
+  console.log(`gate: ${result.decision} — ${result.gateResult.reason}${epochSame ? '' : ' (epoch mismatch → INVALID)'}`);
 
   // 6. promote / 拒绝
   const gateJson = { runId: run.id, decision: result.decision, reason: result.gateResult.reason, baseline, candidate, approvals: args.approval ? [args.approval] : [] };

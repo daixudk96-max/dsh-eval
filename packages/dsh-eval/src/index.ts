@@ -13,11 +13,12 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { homedir } from 'node:os'
 import { loadBenchmark } from './benchmark.ts'
 import { applyEval, type EvalStartupValues } from './command.ts'
 import { compareRuns, renderCompareMarkdown } from './compare.ts'
 import { importTraceFile } from './import.ts'
-import { llmJudgeChat, type JudgeChat } from './judge.ts'
+import { llmJudgeChat, createHttpJudgeChat, resolveJudgeApiKey, type JudgeChat } from './judge.ts'
 import { renderMarkdownReport, writeRunReport, loadRunReport } from './report.ts'
 import { runBenchmark } from './runner.ts'
 import { resolveLauncher } from './launcher.ts'
@@ -50,7 +51,9 @@ export const internals: EvalIo = {
  */
 export function resolveJudgeChat(ctx: Context): JudgeChat | undefined {
   const llm = ctx.get('llm')
-  return llm === undefined ? undefined : llmJudgeChat(llm.stream)
+  // bind: dsh-llm's stream() is a method that reads `this` (ctx/waterfall);
+  // passing the bare reference loses the receiver.
+  return llm === undefined ? undefined : llmJudgeChat(llm.stream.bind(llm))
 }
 
 /** Aggregate-success sentence for the run summary line. */
@@ -183,6 +186,19 @@ export async function executeEval(
           }
         }
       }
+    }
+    // Judge HTTP fallback: when the composition carries no `llm` service but
+    // the benchmark names a judge baseUrl, run the judge over a direct
+    // OpenAI-compatible call instead of failing with "no chat seam".
+    const configuredJudge = effectiveBenchmark.judge
+    if (runOptions.judgeChat === undefined && configuredJudge !== undefined && configuredJudge.baseUrl !== undefined) {
+      const apiKeyEnv = configuredJudge.apiKeyEnv ?? 'CLIPA_API_KEY'
+      const apiKey = resolveJudgeApiKey(apiKeyEnv, homedir())
+      if (apiKey === undefined) {
+        io.stderr.write(`eval: judge baseUrl configured but no api key for "${apiKeyEnv}" (env or ~/.dsh/.credentials.yaml)\n`)
+        return 1
+      }
+      runOptions.judgeChat = createHttpJudgeChat({ baseUrl: configuredJudge.baseUrl, apiKey, model: configuredJudge.model })
     }
     const run = await runBenchmark(effectiveBenchmark, { ...runOptions, command: launcher.argv })
     await writeRunReport(run, values.outPath)

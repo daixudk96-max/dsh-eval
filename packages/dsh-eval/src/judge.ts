@@ -10,6 +10,8 @@
 
 import { BlockAssembler, createMessage, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { BenchmarkCase, BenchmarkJudge, EvalJudgeVerdict, EvalTrace } from './types.ts'
 
 /** One judge chat call: system instructions plus the single task prompt. */
@@ -78,6 +80,7 @@ export function buildJudgePrompt(
     'not supported by the task or the trace.',
     'Return STRICT JSON with exactly these fields:',
     `{"finalAnswerScore": <integer 0..${judge.maxScore}>, "hallucination": <true|false>, "rationale": "<one short sentence>"}`,
+    'Respond with ONLY that JSON object. No markdown fences. No commentary. No other fields.',
     ...(judge.rubric !== undefined ? ['Rubric:', judge.rubric] : []),
   ].join('\n')
   const prompt = [
@@ -164,7 +167,8 @@ export async function tryJudgeTrial(
 ): Promise<EvalJudgeVerdict> {
   try {
     return await judgeTrial(caseValue, trace, judge, chat)
-  } catch {
+  } catch (error) {
+    console.error(`[judge] chat failed: ${error instanceof Error ? error.message : String(error)}`)
     return { finalAnswerScore: null, hallucination: null }
   }
 }
@@ -194,5 +198,74 @@ export function llmJudgeChat(stream: LlmRuntime['stream']): JudgeChat {
     return assembler.message().content
       .flatMap(block => block.type === 'text' ? [block.text] : [])
       .join('')
+  }
+}
+
+/**
+ * Resolve the judge API key for the HTTP fallback: the named environment
+ * variable first, then the user's credentials file (`~/.dsh/.credentials.yaml`,
+ * one `KEY: value` per line). Returns undefined when neither source yields a
+ * value; the caller decides whether that is fatal.
+ * @param apiKeyEnv - the credential env name (e.g. `CLIPA_API_KEY`).
+ * @param homeDir - the user's home directory (for the credentials file).
+ * @returns the key value, or undefined when unresolvable.
+ */
+export function resolveJudgeApiKey(apiKeyEnv: string, homeDir: string): string | undefined {
+  const fromEnv = process.env[apiKeyEnv]
+  if (fromEnv !== undefined && fromEnv !== '') return fromEnv
+  try {
+    const text = readFileSync(join(homeDir, '.dsh', '.credentials.yaml'), 'utf8')
+    for (const line of text.split(/\r?\n/)) {
+      const match = line.match(/^\s*([A-Za-z0-9_]+)\s*:\s*(.*?)\s*$/)
+      if (match !== null && match[1] === apiKeyEnv && match[2] !== '') return match[2]
+    }
+  } catch {
+    // no credentials file — undefined means "unresolvable"
+  }
+  return undefined
+}
+
+/**
+ * Build a judge chat seam over a plain OpenAI-compatible HTTP endpoint. Used
+ * when the mounted composition carries no `llm` service (e.g. the eval profile
+ * bundle), so a configured `judge.baseUrl` still yields real final-answer
+ * scores instead of a fail-loud "no chat seam" error.
+ * @param opts - endpoint, key, model, and timeout.
+ * @param fetchImpl - fetch implementation; tests substitute a fake.
+ * @returns a chat seam reading the completion's text content.
+ */
+export function createHttpJudgeChat(
+  opts: { baseUrl: string; apiKey: string; model: string; timeoutMs?: number },
+  fetchImpl: typeof fetch = fetch,
+): JudgeChat {
+  const timeoutMs = opts.timeoutMs ?? 120000
+  return async (request) => {
+    const response = await fetchImpl(`${opts.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(opts.apiKey !== '' ? { authorization: `Bearer ${opts.apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: opts.model,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: request.system },
+          { role: 'user', content: request.prompt },
+        ],
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      throw new Error(`judge http ${response.status}: ${body.slice(0, 200)}`)
+    }
+    const payload: unknown = await response.json()
+    const content = (payload as { choices?: { message?: { content?: unknown } }[] })
+      .choices?.[0]?.message?.content
+    if (typeof content !== 'string') {
+      throw new Error('judge http: no text content in completion response')
+    }
+    return content
   }
 }

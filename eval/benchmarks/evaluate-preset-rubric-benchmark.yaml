@@ -23,6 +23,10 @@ judge:
   provider: clipa
   model: deepseek-v4-flash
   maxScore: 10
+  # P0-1: HTTP fallback — the eval profile bundle carries no `llm` service,
+  # so the judge runs over a direct OpenAI-compatible call to this endpoint.
+  baseUrl: http://127.0.0.1:8317/v1
+  apiKeyEnv: CLIPA_API_KEY
   rubricText: |
     Score the agent's REPORT.md deliverable on a 0-10 scale per dimension:
     (1) completeness: metrics table with steps, tool calls, tool success rate,

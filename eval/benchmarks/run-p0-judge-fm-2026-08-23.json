@@ -1,0 +1,104 @@
+{
+  "benchmark": "fix-multiply-judge",
+  "model": "deepseek-v4-flash",
+  "provider": "clipa",
+  "reasoningEffort": "max",
+  "createdAt": 1787546673819,
+  "trials": 1,
+  "seed": 42,
+  "pricing": null,
+  "judge": {
+    "provider": "clipa",
+    "model": "deepseek-v4-flash",
+    "maxScore": 10,
+    "rubric": "Score the agent's final answer on a 0-10 scale: (1) correctness of the\nfix (multiply(a, b) returns a * b), (2) whether tests were run until PASS,\n(3) whether ANSWER.md explains the fix. Report each dimension in the\nrationale.\n",
+    "baseUrl": "http://127.0.0.1:8317/v1",
+    "apiKeyEnv": "CLIPA_API_KEY"
+  },
+  "tempRoot": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-t8JIbt",
+  "split": "dev",
+  "cases": [
+    {
+      "caseId": "fix-multiply",
+      "trial": 1,
+      "status": "completed",
+      "tracePath": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-t8JIbt\\fix-multiply-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-t8JIbt-fix-multiply-1-workspace--\\session-e285a2d6-27d7-4599-b0bc-00b5aa9ab793\\session.jsonl",
+      "tracePaths": [
+        "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-t8JIbt\\fix-multiply-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-t8JIbt-fix-multiply-1-workspace--\\session-e285a2d6-27d7-4599-b0bc-00b5aa9ab793\\session.jsonl"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "metrics": {
+        "turns": 1,
+        "steps": 7,
+        "toolCalls": 9,
+        "toolResults": 9,
+        "toolSuccess": 9,
+        "toolSuccessRate": 1,
+        "invalidToolCalls": 0,
+        "retries": 0,
+        "tokens": {
+          "inputTokens": 4178,
+          "cacheReadTokens": 69888,
+          "cacheWriteTokens": 0,
+          "outputTokens": 1571
+        },
+        "totalTokens": 75637,
+        "contextTokens": 74066,
+        "llmMs": 19369,
+        "toolMs": 1364,
+        "ttftMs": 9374,
+        "latencyMs": 21204,
+        "costUsd": null
+      },
+      "grade": {
+        "taskSuccess": true,
+        "toolSelectionAccuracy": true
+      },
+      "judge": {
+        "finalAnswerScore": 8,
+        "hallucination": true,
+        "rationale": "Fix and PASS claim are correct, but final answer asserts unverified check.js/EPERM sandbox details not supported by the trace."
+      }
+    }
+  ],
+  "aggregate": {
+    "turns": 1,
+    "steps": 7,
+    "toolCalls": 9,
+    "toolResults": 9,
+    "toolSuccess": 9,
+    "toolSuccessRate": 1,
+    "invalidToolCalls": 0,
+    "retries": 0,
+    "tokens": {
+      "inputTokens": 4178,
+      "cacheReadTokens": 69888,
+      "cacheWriteTokens": 0,
+      "outputTokens": 1571
+    },
+    "totalTokens": 75637,
+    "contextTokens": 74066,
+    "llmMs": 19369,
+    "toolMs": 1364,
+    "ttftMs": 9374,
+    "latencyMs": 21204,
+    "costUsd": null
+  },
+  "grading": {
+    "taskSuccessRate": 1,
+    "toolSelectionAccuracyRate": 1,
+    "finalAnswerScore": 8,
+    "hallucinationRate": 1
+  },
+  "benchmarkDigest": "f4b9a357ecf81a394e65a61bb6c7cb24ebb7e9f0b9d30311d62d44a1c20f06f8",
+  "caseHashes": {
+    "fix-multiply": "f5dbdae7330df335b5b6114cb8ae2ccd7f1b84363c2bf86e309f42f7fce771f8"
+  },
+  "benchmarkSnapshot": {
+    "frozen": false,
+    "observedDigest": "f4b9a357ecf81a394e65a61bb6c7cb24ebb7e9f0b9d30311d62d44a1c20f06f8",
+    "verified": true,
+    "mismatches": []
+  }
+}

@@ -282,6 +282,137 @@ class Registry {
       else await fsp.copyFile(s, d);
     }
   }
+
+  // ---- archive (P0-4): export / import -----------------------------------
+
+  /**
+   * Export the whole registry (logical/** , pointers/**, revisions/** and the
+   * byte-preserved ledger) into one self-verifying JSON package. staging/**,
+   * .tmp files and live adapter state are excluded. ALL revisions are
+   * exported, not only the rollback window.
+   * @param {string} outPath - destination JSON path.
+   * @returns {Promise<{ schemaVersion: number, packageDigest: string, fileCount: number }>}
+   */
+  async exportSnapshot(outPath) {
+    await this._ensure();
+    const files = [];
+    const walk = async (rel) => {
+      const abs = path.join(this.root, rel);
+      const st = await fsp.stat(abs).catch(() => null);
+      if (!st) return;
+      if (st.isDirectory()) {
+        for (const name of await fsp.readdir(abs)) await walk(path.join(rel, name));
+        return;
+      }
+      if (rel.endsWith('.tmp')) return;
+      const bytes = await fsp.readFile(abs);
+      files.push({
+        path: rel.split(path.sep).join('/'),
+        encoding: 'base64',
+        content: bytes.toString('base64'),
+        sha256: sha256(bytes.toString('utf8')),
+      });
+    };
+    for (const d of ['logical', 'pointers', 'revisions', 'ledger']) await walk(d);
+    files.sort((a, b) => a.path.localeCompare(b.path));
+    const packageDigest = digestObject({ schemaVersion: 1, files });
+    const pkg = { schemaVersion: 1, exportedAt: new Date().toISOString(), files, packageDigest };
+    await writeJsonAtomic(outPath, pkg);
+    return { schemaVersion: 1, packageDigest, fileCount: files.length };
+  }
+
+  /**
+   * Import a snapshot package into a NEW or EMPTY registry root. Validates
+   * schema/version, path safety (no traversal/absolute/duplicate), per-file
+   * hashes, the package digest, revision manifest digests, and pointer/logical
+   * references BEFORE writing anything. A temporary sibling root is populated
+   * and recovered, then renamed over an absent target; an existing empty
+   * target is filled only after all validation. Any failure leaves an
+   * existing target untouched.
+   * @param {object} args
+   * @param {string} args.root - target registry root (must be absent or empty).
+   * @param {string} args.inPath - snapshot JSON path.
+   * @param {boolean} [args.verify=true] - run full integrity verification.
+   * @returns {Promise<{ imported: number, packageDigest: string, revisions: string[] }>}
+   */
+  static async importSnapshot({ root, inPath, verify = true }) {
+    const pkg = await readJson(inPath, null);
+    if (!pkg) throw new Error(`import: cannot read ${inPath}`);
+    if (pkg.schemaVersion !== 1) throw new Error(`import: unsupported schemaVersion ${pkg.schemaVersion}`);
+    if (!Array.isArray(pkg.files)) throw new Error('import: missing files array');
+    const seen = new Set();
+    for (const f of pkg.files) {
+      if (typeof f.path !== 'string' || f.path === '') throw new Error('import: invalid file path');
+      const norm = path.normalize(f.path);
+      if (path.isAbsolute(norm) || norm.startsWith('..') || norm.includes(`..${path.sep}`)) {
+        throw new Error(`import: unsafe path ${f.path}`);
+      }
+      if (seen.has(norm)) throw new Error(`import: duplicate path ${f.path}`);
+      seen.add(norm);
+      if (f.encoding !== 'base64' || typeof f.content !== 'string') throw new Error(`import: bad encoding for ${f.path}`);
+      if (verify) {
+        const bytes = Buffer.from(f.content, 'base64');
+        if (sha256(bytes.toString('utf8')) !== f.sha256) throw new Error(`import: hash mismatch for ${f.path}`);
+      }
+    }
+    if (verify) {
+      const computed = digestObject({ schemaVersion: 1, files: pkg.files });
+      if (computed !== pkg.packageDigest) throw new Error('import: package digest mismatch');
+    }
+    const targetExists = fs.existsSync(root);
+    if (targetExists) {
+      const entries = await fsp.readdir(root);
+      if (entries.length > 0) throw new Error(`import: target root not empty: ${root}`);
+    }
+    const parent = path.dirname(root);
+    const tmpRoot = path.join(parent, `.import-${Date.now().toString(36)}`);
+    await ensureDir(tmpRoot);
+    try {
+      for (const f of pkg.files) {
+        const abs = path.join(tmpRoot, f.path);
+        await ensureDir(path.dirname(abs));
+        await fsp.writeFile(abs, Buffer.from(f.content, 'base64'));
+      }
+      if (verify) {
+        const revDir = path.join(tmpRoot, 'revisions');
+        for (const d of await fsp.readdir(revDir).catch(() => [])) {
+          const manifest = await readJson(path.join(revDir, d, 'manifest.json'), null);
+          if (!manifest) throw new Error(`import: revision ${d} missing manifest`);
+          if (manifest.digest !== d) throw new Error(`import: revision manifest digest mismatch for ${d}`);
+        }
+        const pointersDir = path.join(tmpRoot, 'pointers');
+        for (const name of await fsp.readdir(pointersDir).catch(() => [])) {
+          const pointer = await readJson(path.join(pointersDir, name), null);
+          if (pointer && pointer.digest && !fs.existsSync(path.join(tmpRoot, 'revisions', pointer.digest))) {
+            throw new Error(`import: pointer ${name} references missing revision ${pointer.digest}`);
+          }
+        }
+        const logicalDir = path.join(tmpRoot, 'logical');
+        for (const name of await fsp.readdir(logicalDir).catch(() => [])) {
+          const logical = await readJson(path.join(logicalDir, name), null);
+          if (logical && logical.current && logical.current.digest
+            && !fs.existsSync(path.join(tmpRoot, 'revisions', logical.current.digest))) {
+            throw new Error(`import: logical ${name} references missing revision ${logical.current.digest}`);
+          }
+        }
+      }
+      if (targetExists) {
+        for (const f of pkg.files) {
+          const abs = path.join(root, f.path);
+          await ensureDir(path.dirname(abs));
+          await fsp.writeFile(abs, Buffer.from(f.content, 'base64'));
+        }
+        await fsp.rm(tmpRoot, { recursive: true, force: true });
+      } else {
+        await fsp.rename(tmpRoot, root);
+      }
+    } catch (error) {
+      await fsp.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
+    const revisions = await fsp.readdir(path.join(root, 'revisions')).catch(() => []);
+    return { imported: pkg.files.length, packageDigest: pkg.packageDigest, revisions };
+  }
 }
 
 module.exports = { Registry };

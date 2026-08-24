@@ -59,6 +59,15 @@ export interface BenchmarkJudge {
   rubricCipher?: string
   /** Maximum final-answer score; defaults to 10. */
   maxScore: number
+  /**
+   * Optional OpenAI-compatible base URL for the judge HTTP fallback, used when
+   * the mounted composition carries no `llm` service (e.g. the eval profile
+   * bundle). When set, the judge runs over a direct chat-completions call
+   * instead of failing with "no LLM chat seam is available".
+   */
+  baseUrl?: string
+  /** Credential env name for the judge HTTP fallback; defaults to `CLIPA_API_KEY`. */
+  apiKeyEnv?: string
 }
 
 /** Keyless replay configuration: recorded session logs replayed instead of live model calls. */
@@ -101,6 +110,16 @@ export interface Benchmark {
   replay?: BenchmarkReplay
   /** Directory the benchmark document was loaded from; relative paths resolve against it. */
   baseDir: string
+  /** Absolute path of the benchmark document (frozen re-verification reloads it). */
+  sourcePath: string
+  /** Frozen epoch: materials/config drift invalidates the run. Default false. */
+  frozen: boolean
+  /** Semantic digest of the benchmark (name, case order, case hashes, judge, materials). */
+  benchmarkDigest: string
+  /** Per-case semantic hashes (case fields + benchmark judge rubric hash). */
+  caseHashes: Readonly<Record<string, string>>
+  /** Explicit material manifest: relative path + sha256, resolved against baseDir. */
+  materials: readonly { path: string; sha256: string }[]
 }
 
 /**
@@ -251,4 +270,21 @@ export interface EvalRun {
   aggregate: EvalCaseMetrics | null
   /** Pooled scripted-grading rates over completed trials, or null when ungraded. */
   grading: EvalRunGrading | null
+  /** `invalid` when a frozen benchmark drifted mid-run; `completed` otherwise. */
+  status?: 'completed' | 'invalid'
+  /** Semantic benchmark digest observed for this run. */
+  benchmarkDigest?: string
+  /** Per-case semantic hashes observed for this run. */
+  caseHashes?: Readonly<Record<string, string>>
+  /** Frozen snapshot verification evidence. */
+  benchmarkSnapshot?: {
+    frozen: boolean
+    observedDigest: string
+    verified: boolean
+    mismatches: Array<{ path: string; expected?: string; observed?: string }>
+  }
+  /** True when the frozen benchmark drifted between snapshot and verification. */
+  epochChanged?: boolean
+  /** Sanitized run notes (e.g. frozen drift details). */
+  notes?: string[]
 }

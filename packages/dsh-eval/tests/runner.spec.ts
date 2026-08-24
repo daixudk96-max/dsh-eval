@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runBenchmark } from '../src/runner.ts'
+import { loadBenchmark } from '../src/benchmark.ts'
 import type { Benchmark } from '../src/types.ts'
 
 const FAKE_SCRIPT = fileURLToPath(new URL('./fixtures/fake-dsh.mjs', import.meta.url))
@@ -46,6 +47,11 @@ function buildBenchmark(overrides: Partial<Benchmark> = {}): Benchmark {
       },
     },
     baseDir: process.cwd(),
+    sourcePath: '',
+    frozen: false,
+    benchmarkDigest: 'digest',
+    caseHashes: { hello: 'casehash' },
+    materials: [],
     ...overrides,
   }
 }
@@ -353,5 +359,91 @@ describe('dsh-eval benchmark runner', () => {
       judge: { provider: 'deepseek', model: 'judge-m', maxScore: 10 },
       replay: { dir: replayDir },
     }), { tempRoot: tempDir(), judgeChat: async () => '{}' })).rejects.toThrow('judge and replay cannot be combined')
+  })
+
+  it('invalidates a frozen run when a material drifts mid-run', async () => {
+    process.env.FAKE_DASH_MODE = 'log'
+    process.env.FAKE_DASH_LOG = FIXTURE_LOG
+    const dir = tempDir()
+    const material = join(dir, 'm.txt')
+    writeFileSync(material, 'version A')
+    const yaml = join(dir, 'frozen.yaml')
+    writeFileSync(yaml, [
+      'name: frozen-drift',
+      'model: deepseek-v4',
+      'frozen: true',
+      'materials:',
+      '  - m.txt',
+      'cases:',
+      '  - id: hello',
+      '    prompt: Say hello.',
+      '',
+    ].join('\n'))
+    const benchmark = await loadBenchmark(yaml)
+    // Drift the material AFTER load: the run's end-of-run reload must detect it.
+    writeFileSync(material, 'version B')
+    const run = await runBenchmark(benchmark, { tempRoot: tempDir(), command: [process.execPath, FAKE_SCRIPT] })
+    expect(run.status).toBe('invalid')
+    expect(run.epochChanged).toBe(true)
+    expect(run.aggregate).toBeNull()
+    expect(run.grading).toBeNull()
+    expect(run.benchmarkSnapshot?.verified).toBe(false)
+    expect(run.benchmarkSnapshot?.observedDigest).not.toBe(benchmark.benchmarkDigest)
+    expect(run.benchmarkSnapshot?.mismatches).toHaveLength(1)
+    expect(run.benchmarkSnapshot?.mismatches[0]?.path).toBe('m.txt')
+    expect(run.notes).toContain('frozen benchmark drifted during the run (epoch changed)')
+    // Trial evidence is preserved even though the run is invalid.
+    expect(run.cases[0]?.status).toBe('completed')
+  })
+
+  it('keeps a frozen run completed when nothing drifts', async () => {
+    process.env.FAKE_DASH_MODE = 'log'
+    process.env.FAKE_DASH_LOG = FIXTURE_LOG
+    const dir = tempDir()
+    writeFileSync(join(dir, 'm.txt'), 'stable')
+    const yaml = join(dir, 'frozen.yaml')
+    writeFileSync(yaml, [
+      'name: frozen-stable',
+      'model: deepseek-v4',
+      'frozen: true',
+      'materials:',
+      '  - m.txt',
+      'cases:',
+      '  - id: hello',
+      '    prompt: Say hello.',
+      '',
+    ].join('\n'))
+    const benchmark = await loadBenchmark(yaml)
+    const run = await runBenchmark(benchmark, { tempRoot: tempDir(), command: [process.execPath, FAKE_SCRIPT] })
+    expect(run.status).toBeUndefined()
+    expect(run.epochChanged).toBeUndefined()
+    expect(run.benchmarkSnapshot?.verified).toBe(true)
+    expect(run.benchmarkSnapshot?.observedDigest).toBe(benchmark.benchmarkDigest)
+    expect(run.aggregate).not.toBeNull()
+  })
+
+  it('records the snapshot for non-frozen runs without invalidating', async () => {
+    process.env.FAKE_DASH_MODE = 'log'
+    process.env.FAKE_DASH_LOG = FIXTURE_LOG
+    const dir = tempDir()
+    writeFileSync(join(dir, 'm.txt'), 'version A')
+    const yaml = join(dir, 'plain.yaml')
+    writeFileSync(yaml, [
+      'name: plain',
+      'model: deepseek-v4',
+      'materials:',
+      '  - m.txt',
+      'cases:',
+      '  - id: hello',
+      '    prompt: Say hello.',
+      '',
+    ].join('\n'))
+    const benchmark = await loadBenchmark(yaml)
+    writeFileSync(join(dir, 'm.txt'), 'version B')
+    const run = await runBenchmark(benchmark, { tempRoot: tempDir(), command: [process.execPath, FAKE_SCRIPT] })
+    expect(run.status).toBeUndefined()
+    expect(run.benchmarkSnapshot?.frozen).toBe(false)
+    expect(run.benchmarkSnapshot?.verified).toBe(true)
+    expect(run.aggregate).not.toBeNull()
   })
 })
