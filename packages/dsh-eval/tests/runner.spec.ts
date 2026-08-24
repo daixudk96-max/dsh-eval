@@ -37,7 +37,7 @@ function buildBenchmark(overrides: Partial<Benchmark> = {}): Benchmark {
     trials: 2,
     timeoutMs: 30_000,
     seed: 0,
-    cases: [{ id: 'hello', prompt: 'Say hello.' }],
+    cases: [{ id: 'hello', prompt: 'Say hello and describe the greeting.' }],
     pricing: {
       'deepseek-v4': {
         inputUsdPerMTokens: 0.27,
@@ -84,7 +84,7 @@ describe('dsh-eval benchmark runner', () => {
     const workspace = tempDir()
     writeFileSync(join(workspace, 'seed.txt'), 'seed')
     const tempRoot = tempDir()
-    const run = await runBenchmark(buildBenchmark({ cases: [{ id: 'ws', prompt: 'p', workspace }], trials: 1 }), { tempRoot })
+    const run = await runBenchmark(buildBenchmark({ cases: [{ id: 'ws', prompt: 'A sufficiently long prompt.', workspace }], trials: 1 }), { tempRoot })
     expect(run.cases[0]?.status).toBe('completed')
     expect(existsSync(join(run.tempRoot, 'ws-1', 'workspace', 'seed.txt'))).toBe(true)
   })
@@ -196,7 +196,7 @@ describe('dsh-eval benchmark runner', () => {
     process.env.FAKE_DASH_LOG = FIXTURE_LOG
     const matched = await runBenchmark(buildBenchmark({
       trials: 1,
-      cases: [{ id: 'matched', prompt: 'p', expected: { tool: 'bash' } }],
+      cases: [{ id: 'matched', prompt: 'A sufficiently long prompt.', expected: { tool: 'bash' } }],
     }), { tempRoot: tempDir() })
     expect(matched.cases[0]?.grade).toEqual({ taskSuccess: null, toolSelectionAccuracy: true })
     expect(matched.grading).toEqual({
@@ -208,7 +208,7 @@ describe('dsh-eval benchmark runner', () => {
 
     const missed = await runBenchmark(buildBenchmark({
       trials: 1,
-      cases: [{ id: 'missed', prompt: 'p', expected: { tool: 'web_search' } }],
+      cases: [{ id: 'missed', prompt: 'A sufficiently long prompt.', expected: { tool: 'web_search' } }],
     }), { tempRoot: tempDir() })
     expect(missed.cases[0]?.grade).toEqual({ taskSuccess: null, toolSelectionAccuracy: false })
     expect(missed.grading?.toolSelectionAccuracyRate).toBe(0)
@@ -219,14 +219,14 @@ describe('dsh-eval benchmark runner', () => {
     process.env.FAKE_DASH_LOG = FIXTURE_LOG
     const passing = await runBenchmark(buildBenchmark({
       trials: 1,
-      cases: [{ id: 'pass', prompt: 'p', expected: { check: `"${process.execPath}" ${CHECK_OK}` } }],
+      cases: [{ id: 'pass', prompt: 'A sufficiently long prompt.', expected: { check: `"${process.execPath}" ${CHECK_OK}` } }],
     }), { tempRoot: tempDir() })
     expect(passing.cases[0]?.grade).toEqual({ taskSuccess: true, toolSelectionAccuracy: null })
     expect(passing.grading?.taskSuccessRate).toBe(1)
 
     const failing = await runBenchmark(buildBenchmark({
       trials: 1,
-      cases: [{ id: 'fail', prompt: 'p', expected: { check: `"${process.execPath}" ${CHECK_FAIL}` } }],
+      cases: [{ id: 'fail', prompt: 'A sufficiently long prompt.', expected: { check: `"${process.execPath}" ${CHECK_FAIL}` } }],
     }), { tempRoot: tempDir() })
     expect(failing.cases[0]?.grade).toEqual({ taskSuccess: false, toolSelectionAccuracy: null })
     expect(failing.grading?.taskSuccessRate).toBe(0)
@@ -237,7 +237,7 @@ describe('dsh-eval benchmark runner', () => {
     process.env.FAKE_DASH_LOG = FIXTURE_LOG
     const run = await runBenchmark(buildBenchmark({
       trials: 1,
-      cases: [{ id: 'missing-check', prompt: 'p', expected: { check: 'definitely-missing-check-xyz' } }],
+      cases: [{ id: 'missing-check', prompt: 'A sufficiently long prompt.', expected: { check: 'definitely-missing-check-xyz' } }],
     }), { tempRoot: tempDir() })
     expect(run.cases[0]?.grade?.taskSuccess).toBe(false)
   })
@@ -248,7 +248,7 @@ describe('dsh-eval benchmark runner', () => {
     const tempRoot = tempDir()
     const run = await runBenchmark(buildBenchmark({
       trials: 1,
-      cases: [{ id: 'bad id/../', prompt: 'p' }, { id: '///', prompt: 'q' }],
+      cases: [{ id: 'bad id/../', prompt: 'A sufficiently long prompt.' }, { id: '///', prompt: 'Another sufficiently long prompt.' }],
     }), { tempRoot })
     expect(run.cases[0]?.status).toBe('completed')
     expect(run.cases[1]?.status).toBe('completed')
@@ -350,6 +350,37 @@ describe('dsh-eval benchmark runner', () => {
     expect(run.cases[0]?.error).toContain('no replay fixture found')
   })
 
+  it('records each trial session log to the replay dir after the run', async () => {
+    process.env.FAKE_DASH_MODE = 'log'
+    process.env.FAKE_DASH_LOG = FIXTURE_LOG
+    const replayDir = tempDir()
+    // Pre-seed the replay fixtures so the mount succeeds; the post-run
+    // recording must overwrite them with the harvested session logs.
+    for (const trial of [1, 2]) {
+      const fixtureDir = join(replayDir, `hello-${trial}`)
+      mkdirSync(fixtureDir, { recursive: true })
+      writeFileSync(join(fixtureDir, 'session.jsonl'), 'placeholder')
+    }
+    const run = await runBenchmark(buildBenchmark({ trials: 2, replay: { dir: replayDir } }), { tempRoot: tempDir() })
+    expect(run.cases[0]?.status).toBe('completed')
+    expect(run.cases[1]?.status).toBe('completed')
+    // Each trial's primary session log is copied to <caseId>-<trial>/session.jsonl.
+    for (const result of run.cases) {
+      const recorded = join(replayDir, `hello-${result.trial}`, 'session.jsonl')
+      expect(existsSync(recorded)).toBe(true)
+      expect(readFileSync(recorded, 'utf8')).toBe(readFileSync(FIXTURE_LOG, 'utf8'))
+    }
+  })
+
+  it('does not record replay logs when no replay dir is configured', async () => {
+    process.env.FAKE_DASH_MODE = 'log'
+    process.env.FAKE_DASH_LOG = FIXTURE_LOG
+    const run = await runBenchmark(buildBenchmark({ trials: 1 }), { tempRoot: tempDir() })
+    expect(run.cases[0]?.status).toBe('completed')
+    // No replay dir was configured, so nothing is written outside the temp root.
+    expect(run.cases[0]?.tracePath).toBeTruthy()
+  })
+
   it('rejects judge and replay in one run', async () => {
     process.env.FAKE_DASH_MODE = 'log'
     process.env.FAKE_DASH_LOG = FIXTURE_LOG
@@ -376,7 +407,7 @@ describe('dsh-eval benchmark runner', () => {
       '  - m.txt',
       'cases:',
       '  - id: hello',
-      '    prompt: Say hello.',
+      '    prompt: Say hello and describe the greeting.',
       '',
     ].join('\n'))
     const benchmark = await loadBenchmark(yaml)
@@ -410,7 +441,7 @@ describe('dsh-eval benchmark runner', () => {
       '  - m.txt',
       'cases:',
       '  - id: hello',
-      '    prompt: Say hello.',
+      '    prompt: Say hello and describe the greeting.',
       '',
     ].join('\n'))
     const benchmark = await loadBenchmark(yaml)
@@ -435,7 +466,7 @@ describe('dsh-eval benchmark runner', () => {
       '  - m.txt',
       'cases:',
       '  - id: hello',
-      '    prompt: Say hello.',
+      '    prompt: Say hello and describe the greeting.',
       '',
     ].join('\n'))
     const benchmark = await loadBenchmark(yaml)

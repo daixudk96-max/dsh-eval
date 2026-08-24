@@ -21,7 +21,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { cp, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { cp, copyFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { dump as serializeYaml } from 'js-yaml'
@@ -493,6 +493,10 @@ export async function runBenchmark(benchmark: Benchmark, options: RunOptions = {
     (result): result is EvalTrialResult & { metrics: NonNullable<EvalTrialResult['metrics']> } =>
       result.status === 'completed' && result.metrics !== undefined,
   )
+  // Per-trial weights come from each case's `weight` (default 1), so a heavier
+  // case pulls the aggregate toward its trials.
+  const weightByCase = new Map(effective.cases.map(c => [c.id, c.weight ?? 1]))
+  const weights = completed.map(result => weightByCase.get(result.caseId) ?? 1)
   // Frozen epoch verification: reload the benchmark document and recompute the
   // semantic digest after the full case x trial loop. Drift (materials or
   // config changed mid-run) invalidates the run: trial evidence is preserved
@@ -534,6 +538,22 @@ export async function runBenchmark(benchmark: Benchmark, options: RunOptions = {
       notes = [`frozen benchmark reload failed: ${message(error)}`]
     }
   }
+  // Keyless replay recording: when a replay dir is configured, persist each
+  // trial's harvested primary session log under `<caseId>-<trial>/session.jsonl`
+  // so a later run can replay it without a model key. Only trials that produced
+  // a trace are recorded; the recording is best-effort and never fails the run.
+  if (benchmark.replay !== undefined) {
+    for (const result of results) {
+      if (result.tracePath === undefined) continue
+      const targetDir = join(benchmark.replay.dir, `${sanitizeSegment(result.caseId)}-${result.trial}`)
+      try {
+        await mkdir(targetDir, { recursive: true })
+        await copyFile(result.tracePath, join(targetDir, 'session.jsonl'))
+      } catch (error) {
+        console.error(`[replay] recording failed for ${result.caseId}-${result.trial}: ${message(error)}`)
+      }
+    }
+  }
   return {
     benchmark: benchmark.name,
     model: benchmark.model,
@@ -549,7 +569,7 @@ export async function runBenchmark(benchmark: Benchmark, options: RunOptions = {
     tempRoot: root,
     split: options.split ?? 'dev',
     cases: results,
-    aggregate: status === 'invalid' ? null : aggregateMetrics(completed.map(result => result.metrics)),
+    aggregate: status === 'invalid' ? null : aggregateMetrics(completed.map(result => result.metrics), weights),
     grading: status === 'invalid' ? null : gradingOf(completed),
     ...(status !== 'completed' ? { status } : {}),
     benchmarkDigest: benchmark.benchmarkDigest,

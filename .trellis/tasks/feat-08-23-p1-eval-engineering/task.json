@@ -1,6 +1,6 @@
 {
   "title": "P1: 评测工程化(加权聚合/replay/import codex/status/case 生命周期)",
-  "status": "planning",
+  "status": "in_progress",
   "work": {
     "type": "feat",
     "mode": "standard",

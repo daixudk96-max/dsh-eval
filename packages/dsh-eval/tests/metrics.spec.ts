@@ -194,4 +194,31 @@ describe('dsh-eval cost and aggregation', () => {
     expect(aggregate?.costUsd).toBeNull()
     expect(aggregateMetrics([{ ...a, costUsd: 1 }, { ...a, costUsd: 3 }])?.costUsd).toBe(2)
   })
+
+  it('weights the aggregate mean by per-case weight', () => {
+    const a: EvalCaseMetrics = {
+      turns: 1, steps: 1, toolCalls: 2, toolResults: 2, toolSuccess: 2, toolSuccessRate: 1,
+      invalidToolCalls: 0, retries: 0, tokens: { inputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 },
+      totalTokens: 10, contextTokens: 10, llmMs: 1, toolMs: 2, ttftMs: 3, latencyMs: 4, costUsd: 2,
+    }
+    const b: EvalCaseMetrics = {
+      turns: 1, steps: 3, toolCalls: 1, toolResults: 1, toolSuccess: 0, toolSuccessRate: 0,
+      invalidToolCalls: 1, retries: 2, tokens: { inputTokens: 30, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 },
+      totalTokens: 30, contextTokens: 30, llmMs: 10, toolMs: 20, ttftMs: 30, latencyMs: 40, costUsd: 4,
+    }
+    // Unweighted: (1+3)/2 = 2 steps, (10+30)/2 = 20 input tokens.
+    const plain = aggregateMetrics([a, b])
+    expect(plain?.steps).toBe(2)
+    expect(plain?.tokens.inputTokens).toBe(20)
+    // Weighted 2:1: (2*1 + 1*3)/3 = 5/3 steps, (2*10 + 1*30)/3 = 50/3 input tokens.
+    const weighted = aggregateMetrics([a, b], [2, 1])
+    expect(weighted?.steps).toBeCloseTo(5 / 3, 12)
+    expect(weighted?.tokens.inputTokens).toBeCloseTo(50 / 3, 12)
+    // Pooled success rate is weight-aware too: (2*2 + 1*0)/(2*2 + 1*1) = 4/5.
+    expect(weighted?.toolSuccessRate).toBeCloseTo(4 / 5, 12)
+    // Cost mean is weighted: (2*2 + 1*4)/3 = 8/3.
+    expect(weighted?.costUsd).toBeCloseTo(8 / 3, 12)
+    // A heavier case pulls the aggregate toward it, so it differs from plain.
+    expect(weighted?.steps).not.toBe(plain?.steps)
+  })
 })

@@ -41,7 +41,7 @@ function benchmarkYaml(dir: string): string {
     'model: deepseek-v4',
     'cases:',
     '  - id: hello',
-    '    prompt: Say hello.',
+    '    prompt: Say hello and describe the greeting.',
     'pricing:',
     '  deepseek-v4:',
     '    inputUsdPerMTokens: 0.27',
@@ -127,7 +127,7 @@ describe('dsh-eval command composition', () => {
       '  model: judge-m',
       'cases:',
       '  - id: hello',
-      '    prompt: Say hello.',
+      '    prompt: Say hello and describe the greeting.',
       '',
     ].join('\n'))
     const outPath = join(dir, 'judged-run.json')
@@ -310,7 +310,7 @@ describe('dsh-eval execution entry', () => {
   it('exits 1 when a run completes without any completed trials', async () => {
     const dir = tempDir()
     const benchmarkPath = join(dir, 'benchmark.yml')
-    writeFileSync(benchmarkPath, 'name: noprice\nmodel: m\ncases:\n  - id: a\n    prompt: p\n')
+    writeFileSync(benchmarkPath, 'name: noprice\nmodel: m\ncases:\n  - id: a\n    prompt: A sufficiently long prompt for the benchmark case.\n')
     const outPath = join(dir, 'run.json')
     process.env.FAKE_DASH_MODE = 'none'
     const code = await executeEval(
@@ -324,7 +324,7 @@ describe('dsh-eval execution entry', () => {
   it('reports n/a success and exits 0 for a completed run with no tool results', async () => {
     const dir = tempDir()
     const benchmarkPath = join(dir, 'benchmark.yml')
-    writeFileSync(benchmarkPath, 'name: notools\nmodel: m\ncases:\n  - id: a\n    prompt: p\n')
+    writeFileSync(benchmarkPath, 'name: notools\nmodel: m\ncases:\n  - id: a\n    prompt: A sufficiently long prompt for the benchmark case.\n')
     const logPath = join(dir, 'session.jsonl')
     writeFileSync(logPath, [
       '{"type":"session","version":0,"id":"s","createdAt":1,"delegationDepth":0}',
@@ -357,7 +357,7 @@ describe('dsh-eval execution entry', () => {
       'model: m',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '    expected:',
       `      check: ${JSON.stringify(`"${process.execPath}" ${checkPath}`)}`,
       '',

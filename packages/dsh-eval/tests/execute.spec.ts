@@ -14,7 +14,7 @@ describe('dsh-eval non-Error failures', () => {
   it('renders a non-Error rejection into the stderr diagnostic', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-eval-execute-'))
     const benchmarkPath = join(dir, 'benchmark.yml')
-    writeFileSync(benchmarkPath, 'name: n\nmodel: m\ncases:\n  - id: a\n    prompt: p\n')
+    writeFileSync(benchmarkPath, 'name: n\nmodel: m\ncases:\n  - id: a\n    prompt: A sufficiently long prompt for the benchmark case.\n')
     const stderr: string[] = []
     const code = await executeEval(
       { kind: 'run', benchmarkPath, outPath: join(dir, 'run.json') },

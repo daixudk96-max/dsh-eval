@@ -200,44 +200,52 @@ export function computeMetrics(
 }
 
 /**
- * Aggregate per-trial metrics: arithmetic means for counts and wall times,
- * pooled success rate, and the mean cost when every trial priced it.
+ * Aggregate per-trial metrics: weighted means for counts and wall times,
+ * pooled success rate, and the weighted mean cost when every trial priced it.
+ * Weights come from each case's `weight` (default 1); when omitted every trial
+ * weighs equally, preserving the historical arithmetic-mean behavior.
  * @param items - completed trials' metrics.
+ * @param weights - per-trial weights parallel to `items`; defaults to all 1.
  * @returns the aggregate, or null when no trial is included.
  */
-export function aggregateMetrics(items: readonly EvalCaseMetrics[]): EvalCaseMetrics | null {
+export function aggregateMetrics(
+  items: readonly EvalCaseMetrics[],
+  weights?: readonly number[],
+): EvalCaseMetrics | null {
   if (items.length === 0) return null
-  const mean = (select: (metrics: EvalCaseMetrics) => number): number =>
-    items.reduce((total, metrics) => total + select(metrics), 0) / items.length
-  const toolResults = items.reduce((total, metrics) => total + metrics.toolResults, 0)
-  const toolSuccess = items.reduce((total, metrics) => total + metrics.toolSuccess, 0)
+  const w = weights ?? items.map(() => 1)
+  const totalWeight = w.reduce((total, value) => total + value, 0)
+  const weightedMean = (select: (metrics: EvalCaseMetrics) => number): number =>
+    items.reduce((total, metrics, index) => total + w[index]! * select(metrics), 0) / totalWeight
+  const toolResults = items.reduce((total, metrics, index) => total + w[index]! * metrics.toolResults, 0)
+  const toolSuccess = items.reduce((total, metrics, index) => total + w[index]! * metrics.toolSuccess, 0)
   const costValues = items
     .map(metrics => metrics.costUsd)
     .filter((value): value is number => value !== null)
   const tokens: EvalTokenUsage = {
-    inputTokens: mean(metrics => metrics.tokens.inputTokens),
-    cacheReadTokens: mean(metrics => metrics.tokens.cacheReadTokens),
-    cacheWriteTokens: mean(metrics => metrics.tokens.cacheWriteTokens),
-    outputTokens: mean(metrics => metrics.tokens.outputTokens),
+    inputTokens: weightedMean(metrics => metrics.tokens.inputTokens),
+    cacheReadTokens: weightedMean(metrics => metrics.tokens.cacheReadTokens),
+    cacheWriteTokens: weightedMean(metrics => metrics.tokens.cacheWriteTokens),
+    outputTokens: weightedMean(metrics => metrics.tokens.outputTokens),
   }
   return {
-    turns: mean(metrics => metrics.turns),
-    steps: mean(metrics => metrics.steps),
-    toolCalls: mean(metrics => metrics.toolCalls),
+    turns: weightedMean(metrics => metrics.turns),
+    steps: weightedMean(metrics => metrics.steps),
+    toolCalls: weightedMean(metrics => metrics.toolCalls),
     toolResults,
     toolSuccess,
     toolSuccessRate: toolResults > 0 ? toolSuccess / toolResults : null,
-    invalidToolCalls: mean(metrics => metrics.invalidToolCalls),
-    retries: mean(metrics => metrics.retries),
+    invalidToolCalls: weightedMean(metrics => metrics.invalidToolCalls),
+    retries: weightedMean(metrics => metrics.retries),
     tokens,
-    totalTokens: mean(metrics => metrics.totalTokens),
-    contextTokens: mean(metrics => metrics.contextTokens),
-    llmMs: mean(metrics => metrics.llmMs),
-    toolMs: mean(metrics => metrics.toolMs),
-    ttftMs: mean(metrics => metrics.ttftMs),
-    latencyMs: mean(metrics => metrics.latencyMs),
+    totalTokens: weightedMean(metrics => metrics.totalTokens),
+    contextTokens: weightedMean(metrics => metrics.contextTokens),
+    llmMs: weightedMean(metrics => metrics.llmMs),
+    toolMs: weightedMean(metrics => metrics.toolMs),
+    ttftMs: weightedMean(metrics => metrics.ttftMs),
+    latencyMs: weightedMean(metrics => metrics.latencyMs),
     costUsd: costValues.length === items.length
-      ? costValues.reduce((total, value) => total + value, 0) / items.length
+      ? costValues.reduce((total, value, index) => total + w[index]! * value, 0) / totalWeight
       : null,
   }
 }

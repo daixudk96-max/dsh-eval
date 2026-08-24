@@ -23,6 +23,21 @@ export interface BenchmarkPricing {
 /** Split membership of a benchmark case: `dev` or `guard`. */
 export type BenchmarkSplit = 'dev' | 'guard'
 
+/** Lifecycle stage of a benchmark case; only `frozen` cases participate in gate stats. */
+export type BenchmarkCaseLifecycle = 'draft' | 'calibrating' | 'frozen'
+
+/** Optional case metadata for calibration and evolution bookkeeping. */
+export interface BenchmarkCaseMeta {
+  /** Capability the case targets (string or list). */
+  capability?: string | readonly string[]
+  /** What distinguishes this case from near-duplicates (string or list). */
+  distinguisher?: string | readonly string[]
+  /** Known shortcuts / degenerate solutions to guard against (string or list). */
+  shortcuts?: string | readonly string[]
+  /** Prior calibration outcomes (string or list). */
+  calibrationHistory?: string | readonly string[]
+}
+
 /** One benchmark case: a case and an optional workspace copied per trial. */
 export interface BenchmarkCase {
   /** Stable case id, used in run output and trial directory names. */
@@ -35,6 +50,12 @@ export interface BenchmarkCase {
   workspace?: string
   /** Scripted grading annotations, when the case is graded. */
   expected?: BenchmarkExpectation
+  /** Relative weight in aggregate metrics; defaults to 1. */
+  weight?: number
+  /** Lifecycle stage; defaults to `draft`. Only `frozen` cases enter gate stats. */
+  lifecycle?: BenchmarkCaseLifecycle
+  /** Optional case metadata for calibration and evolution bookkeeping. */
+  meta?: BenchmarkCaseMeta
 }
 
 /** Expected-tool and check-command annotations for scripted grading. */

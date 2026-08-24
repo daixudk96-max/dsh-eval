@@ -77,6 +77,7 @@ function usage() {
 归档模式(不启动评测, 只要求 --registry):
   --export <path>        导出整个 registry 为自校验 JSON 快照
   --import <path>        从快照导入到 --registry 根(目标须不存在或为空)
+  --status               只读列出每个 logical preset 的当前指针/历史链/digest 漂移校验
 
 闭环: current → 候选 → seal → 评测×2 → Gate → promote/拒绝(退出码 1 拒绝)`);
 }
@@ -159,6 +160,43 @@ async function currentFiles(registry, logicalId) {
   return { files: content.files, current: cur };
 }
 
+/**
+ * 只读列出 registry 中每个 logical preset 的当前指针、历史链与 digest 漂移校验
+ * (P1-4)。logical 列表读自 registry 根 logical/ 目录(<logicalId>.json)。
+ * @param {import('../../preset-registry/lib/registry.js').Registry} registry
+ */
+async function printStatus(registry) {
+  const logicalDir = registry.dirs.logical;
+  const logicalIds = fs.existsSync(logicalDir)
+    ? fs.readdirSync(logicalDir).filter((name) => name.endsWith('.json')).map((name) => name.replace(/\.json$/, ''))
+    : [];
+  if (logicalIds.length === 0) {
+    console.log('status: registry has no logical presets');
+    return;
+  }
+  for (const logicalId of logicalIds.sort()) {
+    const current = await registry.resolveCurrent(logicalId);
+    const history = await registry.history(logicalId);
+    console.log(`\n[${logicalId}]`);
+    if (!current) {
+      console.log('  current: (none)');
+    } else {
+      console.log(`  current: ${current.revisionId} (digest ${current.digest.slice(0, 12)}…)`);
+      console.log(`    gateRunId: ${current.gateRunId ?? '(none)'}`);
+      console.log(`    approvalId: ${current.approvalId ?? '(none)'}`);
+    }
+    console.log('  history:');
+    if (history.length === 0) {
+      console.log('    (no history)');
+    }
+    for (const entry of history) {
+      const verify = await registry.verifyRevisionDigest(entry.digest);
+      const drift = verify.ok ? 'ok' : `DRIFT (${verify.reason ?? 'digest mismatch'})`;
+      console.log(`    ${entry.status.padEnd(8)} ${entry.revisionId} digest ${entry.digest.slice(0, 12)}… [${drift}]`);
+    }
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { usage(); return; }
@@ -184,6 +222,23 @@ async function main() {
     const inPath = path.resolve(args.import);
     const result = await Registry.importSnapshot({ root: args.registry, inPath });
     console.log(`✓ imported ${result.imported} files → ${args.registry} (${result.revisions.length} revisions)`);
+    return;
+  }
+
+  // ---- status mode (P1-4): --status, read-only, only requires --registry ----
+  if (args.status) {
+    if (!args.registry) { console.error('error: --registry is required for --status'); process.exit(2); }
+    const incompatible = ['benchmark', 'logical', 'candidate', 'auto', 'approve', 'split', 'min-effect', 'dsh',
+      'benchmark-baseline', 'benchmark-candidate', 'proposal-run', 'model', 'api-key-env', 'redact-value',
+      'export', 'import'];
+    for (const flag of incompatible) {
+      if (args[flag] !== undefined) {
+        console.error(`error: --${flag} is incompatible with --status`);
+        process.exit(2);
+      }
+    }
+    const registry = new Registry({ root: args.registry });
+    await printStatus(registry);
     return;
   }
 

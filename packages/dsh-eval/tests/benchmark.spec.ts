@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { loadBenchmark, parseBenchmark } from '../src/benchmark.ts'
+import { caseCheckProblems, loadBenchmark, parseBenchmark } from '../src/benchmark.ts'
 
 const dirs: string[] = []
 
@@ -21,7 +21,7 @@ afterEach(() => {
 describe('dsh-eval benchmark loading', () => {
   it('loads a document with defaults and resolves relative paths', async () => {
     const dir = tempDir()
-    writeFileSync(join(dir, 'prompt.md'), 'Fix the tests.')
+    writeFileSync(join(dir, 'prompt.md'), 'Fix all the failing tests in this repository.')
     writeFileSync(join(dir, 'seed.txt'), 'seed')
     writeFileSync(join(dir, 'benchmark.yml'), [
       'name: skill-regression',
@@ -55,8 +55,9 @@ describe('dsh-eval benchmark loading', () => {
     expect(benchmark.cases).toEqual([
       {
         id: 'fix-tests-001',
-        prompt: 'Fix the tests.',
+        prompt: 'Fix all the failing tests in this repository.',
         workspace: join(dir, 'seed.txt'),
+        weight: 1,
         expected: { tool: 'bash', check: './check.sh' },
       },
     ])
@@ -79,7 +80,7 @@ describe('dsh-eval benchmark loading', () => {
       'seed: 7',
       'profile: custom',
       'command: [pnpm, dsh]',
-      `cases:\n  - id: a\n    prompt: inline\n    workspace: ${absolute}`,
+      `cases:\n  - id: a\n    prompt: an inline prompt long enough for validation\n    workspace: ${absolute}`,
       '',
     ].join('\n'), dir)
     expect(benchmark.profile).toBe('custom')
@@ -87,7 +88,7 @@ describe('dsh-eval benchmark loading', () => {
     expect(benchmark.trials).toBe(3)
     expect(benchmark.timeoutMs).toBe(500)
     expect(benchmark.seed).toBe(7)
-    expect(benchmark.cases[0]).toEqual({ id: 'a', prompt: 'inline', workspace: absolute })
+    expect(benchmark.cases[0]).toEqual({ id: 'a', prompt: 'an inline prompt long enough for validation', workspace: absolute, weight: 1 })
   })
 
   it('keeps tool-only and check-only expectations', async () => {
@@ -97,7 +98,7 @@ describe('dsh-eval benchmark loading', () => {
       'model: m',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '    expected:',
       '      tool: bash',
       '',
@@ -108,7 +109,7 @@ describe('dsh-eval benchmark loading', () => {
       'model: m',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '    expected:',
       '      check: ./check.sh',
       '',
@@ -125,7 +126,7 @@ describe('dsh-eval benchmark loading', () => {
       '  maxScore: 5',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), tempDir())
     expect(benchmark.judge).toEqual({
@@ -147,7 +148,7 @@ describe('dsh-eval benchmark loading', () => {
       '  model: judge-x',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), tempDir())
     expect(benchmark.judge).toEqual({ provider: 'other', model: 'judge-x', maxScore: 10 })
@@ -164,7 +165,7 @@ describe('dsh-eval benchmark loading', () => {
       '  apiKeyEnv: CLIPA_API_KEY',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), tempDir())
     expect(benchmark.judge).toEqual({
@@ -185,7 +186,7 @@ describe('dsh-eval benchmark loading', () => {
       '  unknownField: x',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), tempDir())).rejects.toThrow()
   })
@@ -198,7 +199,7 @@ describe('dsh-eval benchmark loading', () => {
       '  maxScore: 0',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), tempDir())).rejects.toThrow()
   })
@@ -212,7 +213,7 @@ describe('dsh-eval benchmark loading', () => {
       '  dir: ./replays',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), dir)
     expect(benchmark.replay).toEqual({ dir: join(dir, 'replays') })
@@ -228,7 +229,7 @@ describe('dsh-eval benchmark loading', () => {
       `  dir: ${absolute}`,
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), dir)
     expect(benchmark.replay).toEqual({ dir: absolute })
@@ -267,7 +268,7 @@ describe('dsh-eval benchmark loading', () => {
       'model: m',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), tempDir())
     expect(benchmark.cases[0]?.split).toBeUndefined() // dev is the omitted default
@@ -280,9 +281,9 @@ describe('dsh-eval benchmark loading', () => {
       'model: m',
       'cases:',
       '  - id: dev-case',
-      '    prompt: p1',
+      '    prompt: First long prompt for the split test case.',
       '  - id: guard-case',
-      '    prompt: p2',
+      '    prompt: Second long prompt for the split test case.',
       '    split: guard',
       '',
     ].join('\n')
@@ -302,7 +303,7 @@ describe('dsh-eval benchmark loading', () => {
       'model: m',
       'cases:',
       '  - id: dev-only',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), tempDir(), {}, 'guard')).rejects.toThrow('no cases in split "guard"')
   })
@@ -313,7 +314,7 @@ describe('dsh-eval benchmark loading', () => {
       'model: m',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '    split: staging',
       '',
     ].join('\n'), tempDir())).rejects.toThrow()
@@ -326,9 +327,9 @@ describe('dsh-eval benchmark loading', () => {
       'model: m',
       'cases:',
       '  - id: dev-case',
-      '    prompt: p1',
+      '    prompt: First long prompt for the split test case.',
       '  - id: guard-case',
-      '    prompt: p2',
+      '    prompt: Second long prompt for the split test case.',
       '    split: guard',
       '',
     ].join('\n'))
@@ -347,7 +348,7 @@ describe('dsh-eval benchmark loading', () => {
       '  - m.txt',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n')
     const first = await parseBenchmark(document, dir)
@@ -374,7 +375,7 @@ describe('dsh-eval benchmark loading', () => {
       '  - m.txt',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n')
     const before = await parseBenchmark(document, dir)
@@ -392,7 +393,7 @@ describe('dsh-eval benchmark loading', () => {
       '  - ../outside.txt',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), dir)).rejects.toThrow('escapes the benchmark directory')
   })
@@ -403,7 +404,7 @@ describe('dsh-eval benchmark loading', () => {
       'model: m',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'), tempDir())
     expect(benchmark.frozen).toBe(false)
@@ -419,10 +420,147 @@ describe('dsh-eval benchmark loading', () => {
       'frozen: true',
       'cases:',
       '  - id: a',
-      '    prompt: p',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
       '',
     ].join('\n'))
     const benchmark = await loadBenchmark(join(dir, 'frozen.yml'))
     expect(benchmark.sourcePath).toBe(join(dir, 'frozen.yml'))
+  })
+
+  it('defaults case weight to 1 and preserves an explicit weight (P1-1)', async () => {
+    const benchmark = await parseBenchmark([
+      'name: weights',
+      'model: m',
+      'cases:',
+      '  - id: plain',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
+      '  - id: heavy',
+      '    prompt: Another sufficiently long prompt for the case.',
+      '    weight: 2',
+      '',
+    ].join('\n'), tempDir())
+    expect(benchmark.cases[0]).toMatchObject({ id: 'plain', weight: 1 })
+    expect(benchmark.cases[1]).toMatchObject({ id: 'heavy', weight: 2 })
+  })
+
+  it('rejects a non-positive case weight', async () => {
+    await expect(parseBenchmark([
+      'name: weights',
+      'model: m',
+      'cases:',
+      '  - id: a',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
+      '    weight: 0',
+      '',
+    ].join('\n'), tempDir())).rejects.toThrow()
+  })
+
+  it('parses and preserves case lifecycle and meta (P1-5)', async () => {
+    const benchmark = await parseBenchmark([
+      'name: lifecycle',
+      'model: m',
+      'cases:',
+      '  - id: draft-case',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
+      '  - id: calibrating-case',
+      '    prompt: Another sufficiently long prompt for the case.',
+      '    lifecycle: calibrating',
+      '    meta:',
+      '      capability: [codegen, debugging]',
+      '      distinguisher: recursion',
+      '  - id: frozen-case',
+      '    prompt: Yet another sufficiently long prompt for the case.',
+      '    lifecycle: frozen',
+      '    meta:',
+      '      capability: refactoring',
+      '      calibrationHistory:',
+      '        - v1',
+      '        - v2',
+      '',
+    ].join('\n'), tempDir())
+    // Draft lifecycle is the omitted default: neither field surfaces.
+    expect(benchmark.cases[0]).toMatchObject({ id: 'draft-case' })
+    expect(benchmark.cases[0]?.lifecycle).toBeUndefined()
+    expect(benchmark.cases[0]?.meta).toBeUndefined()
+    expect(benchmark.cases[1]).toMatchObject({
+      id: 'calibrating-case',
+      lifecycle: 'calibrating',
+      meta: { capability: ['codegen', 'debugging'], distinguisher: 'recursion' },
+    })
+    expect(benchmark.cases[2]).toMatchObject({
+      id: 'frozen-case',
+      lifecycle: 'frozen',
+      meta: { capability: 'refactoring', calibrationHistory: ['v1', 'v2'] },
+    })
+  })
+
+  it('rejects an unknown meta field', async () => {
+    await expect(parseBenchmark([
+      'name: lifecycle',
+      'model: m',
+      'cases:',
+      '  - id: a',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
+      '    lifecycle: frozen',
+      '    meta:',
+      '      bogus: x',
+      '',
+    ].join('\n'), tempDir())).rejects.toThrow()
+  })
+
+  it('rejects a short prompt (P1-6)', async () => {
+    await expect(parseBenchmark([
+      'name: check',
+      'model: m',
+      'cases:',
+      '  - id: a',
+      '    prompt: too short',
+      '',
+    ].join('\n'), tempDir())).rejects.toThrow('at least 20 characters')
+  })
+
+  it('rejects a non-draft lifecycle without meta (P1-6)', async () => {
+    await expect(parseBenchmark([
+      'name: check',
+      'model: m',
+      'cases:',
+      '  - id: a',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
+      '    lifecycle: frozen',
+      '',
+    ].join('\n'), tempDir())).rejects.toThrow('has no meta')
+  })
+
+  it('rejects an empty configured judge rubric (P1-6)', async () => {
+    // An empty string is already rejected by the schema; caseCheckProblems
+    // additionally flags a whitespace-only rubric that passes min(1).
+    const caseValue = await (async () => {
+      const benchmark = await parseBenchmark([
+        'name: check',
+        'model: m',
+        'cases:',
+        '  - id: a',
+        '    prompt: A sufficiently long prompt for the benchmark case.',
+        '',
+      ].join('\n'), tempDir())
+      return benchmark.cases[0]
+    })()
+    expect(caseCheckProblems(caseValue!, { provider: '', model: 'm', maxScore: 10, rubric: '   ' }).join(' '))
+      .toContain('judge rubric is empty')
+  })
+
+  it('accepts a frozen case with meta (P1-6 positive)', async () => {
+    const benchmark = await parseBenchmark([
+      'name: check',
+      'model: m',
+      'cases:',
+      '  - id: a',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
+      '    lifecycle: frozen',
+      '    meta:',
+      '      capability: refactoring',
+      '',
+    ].join('\n'), tempDir())
+    expect(benchmark.cases[0]).toMatchObject({ id: 'a', lifecycle: 'frozen' })
   })
 })
