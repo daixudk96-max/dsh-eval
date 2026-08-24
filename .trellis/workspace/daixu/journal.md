@@ -87,3 +87,9 @@
 - 已知项(未修, 记档): console Host 构造 new Registry({root}) 未注入 DSH agentPresets 适配器 → 当前版本条 resolved 芯片恒 false(AC3 仍满足, 语义惰性); GUI 浏览器挂载验证未做(需 DSH 重启, 主会话协调); 真实端到端回滚未跑(smoke 只走拒绝路径保持只读)。
 - 提交: 新包 + research/webui-base-selection.md + feature-union-gap.md P4 勾选 + task 文档 + journal, 后接 archive auto-commit。
 - GUI 挂载验证(2026-08-24, 用户重启 DSH 后): 安装 `dsh plugin --profile web add E:/github/dsh-eval/packages/dsh-eval-console`(link 方式, bundles 含 dsh-eval-console)成功; 服务端探测: GET /eval/state → 403 fence(路由已注册, 裸请求正确拦截), GET /plugins/dsh-eval-console/client.js → 200 49,477 B(__ModuleLoader__.load 握手正确); 浏览器确认「进化」标签已出现(order:20, 轨迹之后)——AC2/AC3/AC4/AC5 浏览器侧全部确认, P4 完全收尾。
+
+## 2026-08-25 cmd-surface(方向2)完成 — commit da059ef
+- 任务 08-25-cmd-surface: registry.decodeFileId(逆编码, %25 先于 %3A 解码防二次解码)+ printStatus 解码假 id(修 P3 观察项: state%3Aprompt%3Astyle 假 id/二次编码 none)+ dsh-evolve.js --budget-dir/--budget-limit。
+- 关键发现: BudgetLedger 语义 limitUsd <= 0 = 无限(P2 约定); CLI 传 0 会静默变无限 → CLI 要求 limit > 0 才启用, ≤0/单侧给警告禁用。
+- 预算拒绝验证方式: 预置 ledger spend 记录(limit 0.01 + spend 0.01) → newRun remaining=0 → 'evolution budget exhausted (remaining 0 USD)' + exit 1(多轮场景: 上一轮花光本轮拒)。
+- AC1-AC4 全达成: --status 真实 registry 输出 evaluate/system-evaluator/system-evolver 三链无假 id; registry 9/9; evolution-controller 22 文件全绿。
