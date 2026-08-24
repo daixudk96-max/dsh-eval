@@ -84,9 +84,11 @@ function parseJsonLoose(text) {
  * @param {object} opts.llm - { complete(system, user) → string }.
  * @param {string[]} [opts.redactValues] - known credential values to mask.
  * @param {number} [opts.maxContentChars] - cap on baseline content sent (default 20000).
+ * @param {string} [opts.variantHint] - optional hint asking for a candidate whose
+ *   main hypothesis differs from earlier ones (used by proposeMultiple).
  * @returns {Promise<{ok: true, hypothesis, evidence, mutations, candidateFiles} | {ok: false, reason: string}>}
  */
-async function propose({ runJson, baselineFiles, logicalId, llm, redactValues = [], maxContentChars = 20000 }) {
+async function propose({ runJson, baselineFiles, logicalId, llm, redactValues = [], maxContentChars = 20000, variantHint = null }) {
   if (!llm || typeof llm.complete !== 'function') return { ok: false, reason: 'proposer: llm client is required' };
   const failures = failureEvidence(runJson);
   const failureLines = redactReviewText(failures.join('\n'), { values: redactValues }).split('\n').filter(Boolean);
@@ -102,6 +104,7 @@ async function propose({ runJson, baselineFiles, logicalId, llm, redactValues = 
   const user = [
     `logical preset: ${logicalId}`,
     `files: ${names.join(', ')}`,
+    ...(variantHint ? ['', `NOTE: ${variantHint}`] : []),
     '',
     'FAILED CASES (evidence):',
     failureLines.join('\n'),
@@ -146,4 +149,63 @@ async function propose({ runJson, baselineFiles, logicalId, llm, redactValues = 
   return { ok: true, hypothesis, evidence, mutations, candidateFiles };
 }
 
-module.exports = { propose, failureEvidence, parseJsonLoose };
+/** Content fingerprint used to de-duplicate candidates from the same proposer run. */
+function candidateKey(proposal) {
+  const files = proposal.candidateFiles || {};
+  return JSON.stringify([proposal.hypothesis, Object.keys(files).sort().map((k) => [k, files[k]])]);
+}
+
+/**
+ * Propose up to `count` candidates with distinct main hypotheses (W_p cap).
+ *
+ * Wraps propose() with per-attempt variant hints; candidates that come back
+ * identical (same hypothesis + same file contents) are dropped and the LLM is
+ * re-asked with a stronger hint. The real quality/duplicate floor is enforced
+ * later by controller.createCandidate → proposal-check; this only avoids
+ * wasting LLM calls on carbon copies. Stops early when the LLM refuses or the
+ * attempt budget (2×count) is exhausted, returning the candidates gathered so
+ * far — an honest partial result, never a padded one.
+ *
+ * @param {object} opts - same as propose(), plus { count }.
+ * @param {number} opts.count - how many distinct candidates to request (≤ 3).
+ * @returns {Promise<{ok: boolean, candidates: object[], reason?: string}>}
+ */
+async function proposeMultiple({ count = 1, runJson, baselineFiles, logicalId, llm, redactValues = [], maxContentChars = 20000 }) {
+  const want = Math.max(1, Math.min(3, Number(count) || 1));
+  const out = [];
+  const seen = new Set();
+  const maxAttempts = want * 2;
+  const retryable = (reason) => /llm call failed|fetch failed|timeout|ECONNRESET|ETIMEDOUT|aborted/u.test(String(reason));
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  for (let attempt = 0; attempt < maxAttempts && out.length < want; attempt += 1) {
+    const variantHint = out.length === 0
+      ? null
+      : `This is candidate ${out.length + 1} of ${want}. Your main hypothesis MUST differ from the earlier one(s): ${out.map((c) => `"${c.hypothesis}"`).join('; ')}.`;
+    // Transient LLM/infra failures (connection reset, timeout) are retried up to
+    // twice with a short backoff; content-level refusals are not (re-asking
+    // cannot change the evidence).
+    let proposal = null;
+    for (let tries = 0; tries < 3; tries += 1) {
+      proposal = await propose({
+        runJson, baselineFiles, logicalId, llm, redactValues, maxContentChars,
+        ...(variantHint ? { variantHint } : {}),
+      });
+      if (proposal.ok || !retryable(proposal.reason)) break;
+      await sleep(2000 * (tries + 1));
+    }
+    if (!proposal.ok) {
+      // LLM refusal is not recoverable by re-asking with a hint. If we already
+      // have candidates, stop with an honest partial result; otherwise surface
+      // the original refusal reason.
+      if (out.length > 0) break;
+      return { ok: false, reason: proposal.reason, candidates: out };
+    }
+    const key = candidateKey(proposal);
+    if (seen.has(key)) continue; // carbon copy — re-ask with hint next round
+    seen.add(key);
+    out.push(proposal);
+  }
+  return { ok: out.length > 0, candidates: out, ...(out.length > 0 ? {} : { reason: 'proposer: no distinct candidates produced' }) };
+}
+
+module.exports = { propose, proposeMultiple, failureEvidence, parseJsonLoose };

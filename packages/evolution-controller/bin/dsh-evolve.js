@@ -68,9 +68,11 @@ function usage() {
   --logical <id>         必填: logical preset id
   --candidate <dir>      可选: 候选内容目录(变异后文件); 缺省 = 读 current 内容
   --auto                 可选: LLM proposer 自动生成候选(读失败证据)
+  --candidates <n>       可选(仅 --auto): 生成 n 个互异假设候选并并行评测(默认 1; 上限 3)
   --proposal-run <json>  可选(--auto 时): 用历史真实失败 run.json 作证据(默认=本次 baseline)
   --model <id>           可选: proposer LLM 模型(默认 deepseek-v4-flash)
   --api-key-env <name>   可选: proposer 凭证 env/credentials 名(默认 CLIPA_API_KEY)
+  --llm-timeout <ms>     可选: proposer LLM 调用超时(默认 300000)
   --split <dev|guard>    默认 dev
   --approve <approvalId> 可选: 人审绑定; 缺省 = 演示拒绝
   --min-effect <n>       默认 0.05
@@ -141,6 +143,14 @@ function epochSameOf(baselineRun, candidateRun) {
   return b.status === 'completed' && c.status === 'completed'
     && b.verified && c.verified
     && b.digest !== null && b.digest === c.digest;
+}
+
+/** 从 dsh-eval run.json 取真实成本(USD); 无记录 = 0(预算记账不伪造)。 */
+function extractCost(run) {
+  const agg = run.aggregate || {};
+  if (typeof agg.costUsd === 'number') return agg.costUsd;
+  const m = (run.cases || [])[0] && (run.cases)[0].metrics;
+  return m && typeof m.costUsd === 'number' ? m.costUsd : 0;
 }
 
 /** 读目录为 {relPath: text}(候选内容)。 */
@@ -214,7 +224,7 @@ async function main() {
     if (!args.registry) { console.error('error: --registry is required for --export/--import'); process.exit(2); }
     const incompatible = ['benchmark', 'logical', 'candidate', 'auto', 'approve', 'split', 'min-effect', 'dsh',
       'benchmark-baseline', 'benchmark-candidate', 'proposal-run', 'model', 'api-key-env', 'redact-value',
-      'budget-dir', 'budget-limit'];
+      'budget-dir', 'budget-limit', 'candidates'];
     for (const flag of incompatible) {
       if (args[flag] !== undefined) {
         console.error(`error: --${flag} is incompatible with --export/--import`);
@@ -239,7 +249,7 @@ async function main() {
     if (!args.registry) { console.error('error: --registry is required for --status'); process.exit(2); }
     const incompatible = ['benchmark', 'logical', 'candidate', 'auto', 'approve', 'split', 'min-effect', 'dsh',
       'benchmark-baseline', 'benchmark-candidate', 'proposal-run', 'model', 'api-key-env', 'redact-value',
-      'export', 'import', 'budget-dir', 'budget-limit'];
+      'export', 'import', 'budget-dir', 'budget-limit', 'candidates'];
     for (const flag of incompatible) {
       if (args[flag] !== undefined) {
         console.error(`error: --${flag} is incompatible with --status`);
@@ -275,6 +285,7 @@ async function main() {
   const logicalId = args.logical;
   const split = args.split === 'guard' ? 'guard' : 'dev';
   const minEffect = Number(args['min-effect'] ?? 0.05);
+  const candidateCount = Math.max(1, Math.min(3, Number(args.candidates ?? 1) || 1));
   const outDir = args.out ?? path.join(process.cwd(), 'evolve-out');
   const dshLauncher = (args.dsh ?? 'node E:\\github\\dsh\\apps\\cli\\lib\\bin.js').split(/\s+/);
   fs.mkdirSync(outDir, { recursive: true });
@@ -307,18 +318,19 @@ async function main() {
   const baseline = evalEvidence(baselineRun);
   console.log(`baseline: ${JSON.stringify(baseline)}`);
 
-  // 3. 候选内容: --candidate 目录 | --auto proposer | 缺省占位变异
+  // 3. 候选内容(仅单候选模式; 多候选走下方独立分支): --candidate 目录 | --auto proposer | 缺省占位变异
   let candidateFiles;
   let hypothesis = 'dsh-evolve CLI run: mutate preset content and verify via real benchmark';
   let evidence = [`baseline ${current.revisionId} → candidate`];
   let mutations = [{ kind: 'replace', path: '(candidate dir)', op: 'sync' }];
+  if (candidateCount === 1) {
   if (args.candidate) {
     candidateFiles = readDirAsFiles(path.resolve(args.candidate));
     console.log(`▶ candidate: ${Object.keys(candidateFiles).length} files from ${args.candidate}`);
   } else if (args.auto) {
     const { propose } = require('../lib/proposer.js');
     const { createChatClient } = require('../lib/llm-client.js');
-    const llm = createChatClient({ apiKeyEnv: args['api-key-env'] ?? 'CLIPA_API_KEY', model: args.model ?? 'deepseek-v4-flash' });
+    const llm = createChatClient({ apiKeyEnv: args['api-key-env'] ?? 'CLIPA_API_KEY', model: args.model ?? 'deepseek-v4-flash', timeoutMs: Number(args['llm-timeout'] ?? 300000) });
     // 失败证据来源: --proposal-run <run.json>(历史真实失败记录, growing-archive
     // 思路)优先; 否则用刚跑的 baseline run(若其有失败 case)。
     let proposalRun = baselineRun;
@@ -344,6 +356,117 @@ async function main() {
     const readmeKey = Object.keys(candidateFiles).find((k) => /readme/i.test(k)) ?? Object.keys(candidateFiles)[0];
     candidateFiles[readmeKey] = `${candidateFiles[readmeKey].replace(/\s*$/, '')}\n\n- dsh-evolve: candidate v1 (see audit ledger)\n`;
     console.log('▶ candidate: no --candidate, appended marker line to', readmeKey);
+  }
+  } // end candidateCount === 1
+
+  // ---------- 多候选模式 (--candidates n > 1, 仅 --auto): 互异假设 → 并行评测 → 选择 ----------
+  if (candidateCount > 1) {
+    if (args.candidate) {
+      console.error('error: --candidate is incompatible with --candidates > 1');
+      process.exit(2);
+    }
+    if (!args.auto) {
+      console.error('error: --candidates > 1 requires --auto (proposer must generate distinct hypotheses)');
+      process.exit(2);
+    }
+    const { proposeMultiple } = require('../lib/proposer.js');
+    const { createChatClient } = require('../lib/llm-client.js');
+    const llm = createChatClient({ apiKeyEnv: args['api-key-env'] ?? 'CLIPA_API_KEY', model: args.model ?? 'deepseek-v4-flash', timeoutMs: Number(args['llm-timeout'] ?? 300000) });
+    let proposalRun = baselineRun;
+    if (args['proposal-run']) {
+      proposalRun = JSON.parse(fs.readFileSync(path.resolve(args['proposal-run']), 'utf8'));
+      console.log(`▶ proposer: 失败证据来自 ${args['proposal-run']}(历史真实失败)`);
+    }
+    console.log(`▶ proposer: LLM 生成 ${candidateCount} 个互异假设候选 …`);
+    const multi = await proposeMultiple({
+      count: candidateCount, runJson: proposalRun, baselineFiles: currentContent, logicalId,
+      llm, redactValues: [args['redact-value']].filter(Boolean),
+    });
+    if (!multi.ok) { console.error(`✗ proposer 拒绝: ${multi.reason}`); process.exit(1); }
+    console.log(`▶ proposer: ${multi.candidates.length} 候选 — ${multi.candidates.map((c) => c.hypothesis).join(' | ')}`);
+    fs.writeFileSync(path.join(outDir, 'proposal.json'), JSON.stringify(multi, null, 2), 'utf8');
+
+    // seal 各候选(顺序, 快)
+    const runs = [];
+    for (const [i, cand] of multi.candidates.entries()) {
+      const run = await controller.newRun({ source: logicalId, triggerEvaluationRunId: 'dsh-evolve-cli', selectedFailureClusters: [] });
+      const candidateId = await controller.createCandidate(run.id, {
+        logicalId, sourceRevisionId: current.revisionId,
+        hypothesis: cand.hypothesis, evidence: cand.evidence, mutations: cand.mutations,
+        readCandidateFiles: async () => cand.candidateFiles,
+      });
+      const stagingDir = path.join(registry.dirs.staging, candidateId);
+      for (const [name, content] of Object.entries(cand.candidateFiles)) {
+        const abs = path.join(stagingDir, name);
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, content, 'utf8');
+      }
+      const sealed = await controller.seal(run.id);
+      console.log(`▶ sealed[${i}] ${sealed.revisionId} (digest ${sealed.digest.slice(0, 12)}…)`);
+      runs.push({ run, candidateId, sealed, cand });
+    }
+
+    // 并行评测(并发 ≤2) + Code Gate + budget 记账
+    const outcomes = [];
+    for (let i = 0; i < runs.length; i += 2) {
+      const batch = runs.slice(i, i + 2);
+      const settled = await Promise.allSettled(batch.map(async (r) => {
+        // 预算检查在评测前: 已无剩余预算 → 该候选标注 budget-blocked, 不启动子进程
+        if (controller.budget) {
+          const affordable = await controller.budget.canAfford('attempt', 0);
+          if (!affordable) {
+            console.log(`gate[${r.candidateId}]: budget-blocked (no remaining budget)`);
+            return {
+              runId: r.run.id, candidateId: r.candidateId, revisionId: r.sealed.revisionId,
+              decision: null, state: 'budget-blocked', reason: 'evolution budget exhausted before evaluation',
+              gain: null, efficiencyGain: null, steps: null, costUsd: 0,
+            };
+          }
+        }
+        const outPath = path.join(outDir, `candidate-${r.run.id}.json`);
+        const candidateRun = await runBenchmark({ dshLauncher, benchmarkPath: benchmarkCandidate, split, outPath });
+        const cand = evalEvidence(candidateRun);
+        const epochSame = epochSameOf(baselineRun, candidateRun);
+        const gateOverrides = { minEffect, ...(epochSame ? {} : { epochSame: false }) };
+        const result = await controller.evaluate(r.run.id, {
+          baseline: { overall: baseline.overall, correctness: baseline.correctness, safety: baseline.safety, verification: baseline.verification, steps: baseline.steps },
+          candidate: { overall: cand.overall, correctness: cand.correctness, safety: cand.safety, verification: cand.verification, steps: cand.steps },
+          gateOverrides,
+        });
+        const costUsd = extractCost(candidateRun);
+        await controller.spendBudget('attempt', costUsd, { runId: r.run.id, candidateId: r.candidateId });
+        console.log(`gate[${r.candidateId}]: ${result.decision} — ${result.gateResult.reason}`);
+        return {
+          runId: r.run.id, candidateId: r.candidateId, revisionId: r.sealed.revisionId,
+          decision: result.decision, state: result.state, reason: result.gateResult.reason,
+          gain: result.gateResult.gain, efficiencyGain: result.gateResult.efficiencyGain ?? null,
+          steps: cand.steps, costUsd,
+        };
+      }));
+      settled.forEach((s, j) => {
+        const base = { runId: runs[i + j].run.id, candidateId: runs[i + j].candidateId, revisionId: runs[i + j].sealed.revisionId };
+        outcomes.push(s.status === 'fulfilled' ? s.value : { ...base, error: s.reason && s.reason.message ? s.reason.message : String(s.reason) });
+      });
+    }
+    fs.writeFileSync(path.join(outDir, 'candidates.json'), JSON.stringify(outcomes, null, 2), 'utf8');
+
+    const accepted = outcomes.filter((o) => o.state === 'ACCEPTED' && !o.error);
+    if (accepted.length === 0) {
+      fs.writeFileSync(path.join(outDir, 'result.json'), JSON.stringify({ status: 'rejected', reason: `no candidate accepted (${outcomes.length} evaluated)` }, null, 2), 'utf8');
+      console.error(`✗ not promoted: no candidate accepted`);
+      process.exit(1);
+    }
+    const pick = [...accepted].sort((a, b) => (b.gain - a.gain) || ((b.efficiencyGain ?? -1) - (a.efficiencyGain ?? -1)))[0];
+    console.log(`▶ pick: ${pick.candidateId} (gain ${pick.gain}, eff ${pick.efficiencyGain})`);
+    if (args.approve) {
+      const promoted = await controller.promote(pick.runId, { logicalId, approvalId: args.approve });
+      fs.writeFileSync(path.join(outDir, 'result.json'), JSON.stringify({ status: 'promoted', revisionId: promoted.revisionId, digest: promoted.digest, pickedCandidateId: pick.candidateId }, null, 2), 'utf8');
+      console.log(`✓ PROMOTED] ${promoted.revisionId} (candidate ${pick.candidateId}, approval ${args.approve})`);
+      return;
+    }
+    fs.writeFileSync(path.join(outDir, 'result.json'), JSON.stringify({ status: 'rejected', reason: `gate ACCEPTED (candidate ${pick.candidateId}) but no --approve given` }, null, 2), 'utf8');
+    console.error(`✗ not promoted: gate ACCEPTED (candidate ${pick.candidateId}) but no --approve given`);
+    process.exit(1);
   }
 
   // 4. 进化域: newRun → createCandidate → seal
