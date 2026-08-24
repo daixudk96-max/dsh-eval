@@ -77,8 +77,17 @@ class Registry {
     return run;
   }
 
-  _pointerFile(logicalId) { return path.join(this.dirs.pointers, `${logicalId}.current.json`); }
-  _logicalFile(logicalId) { return path.join(this.dirs.logical, `${logicalId}.json`); }
+  /**
+   * Filesystem-safe encoding of a logicalId for use in file names. Percent-
+   * encodes ':' and '%' so ids like `state:prompt:archive` stay Windows-safe
+   * (`state%3Aprompt%3Aarchive`). Identity for every existing preset id, and
+   * reversible: the logicalId is always stored verbatim in the pointer/logical
+   * JSON, only the file name is encoded.
+   */
+  _safeFileId(logicalId) { return String(logicalId).replace(/%|:/g, (c) => (c === '%' ? '%25' : '%3A')); }
+
+  _pointerFile(logicalId) { return path.join(this.dirs.pointers, `${this._safeFileId(logicalId)}.current.json`); }
+  _logicalFile(logicalId) { return path.join(this.dirs.logical, `${this._safeFileId(logicalId)}.json`); }
   _revisionDir(digest) { return path.join(this.dirs.revisions, digest); }
   _candidateDir(candidateId) { return path.join(this.dirs.staging, candidateId); }
 
