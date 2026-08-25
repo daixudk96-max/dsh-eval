@@ -12,7 +12,7 @@ import { BlockAssembler, createMessage, type LlmRuntime } from '@deepseek-ai/dsh
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { BenchmarkCase, BenchmarkJudge, EvalJudgeVerdict, EvalTrace } from './types.ts'
+import type { BenchmarkCase, BenchmarkJudge, EvalJudgeVerdict, EvalTrace, JudgeCriterion } from './types.ts'
 
 /** One judge chat call: system instructions plus the single task prompt. */
 export interface JudgeChatRequest {
@@ -73,13 +73,27 @@ export function buildJudgePrompt(
   trace: EvalTrace,
   judge: BenchmarkJudge,
 ): { system: string; prompt: string } {
+  const hasCriteria = judge.criteria !== undefined && judge.criteria.length > 0
   const system = [
     'You are an impartial evaluation judge for agent task completion.',
-    `Score the agent's final answer from 0 to ${judge.maxScore} against the task,`,
-    'and set "hallucination" to true only when the final answer asserts facts',
-    'not supported by the task or the trace.',
-    'Return STRICT JSON with exactly these fields:',
-    `{"finalAnswerScore": <integer 0..${judge.maxScore}>, "hallucination": <true|false>, "rationale": "<one short sentence>"}`,
+    ...(hasCriteria
+      ? [
+          'Judge the agent by the criteria below. For EACH criterion answer only',
+          'PASS (true) or FAIL (false), strictly from the task and the trace evidence.',
+          'Do NOT emit a numeric score: the final score is computed elsewhere from',
+          'your pass/fail answers.',
+          ...judge.criteria!.map(c => `- ${c.label}`),
+          'Return STRICT JSON with exactly these fields:',
+          '{"hallucination": <true|false>, "criteria": [{"label": "<exact criterion label>", "pass": <true|false>, "why": "<one short sentence>"}], "rationale": "<one short sentence>"}',
+          'Every criterion label must appear exactly once in "criteria".',
+        ]
+      : [
+          `Score the agent's final answer from 0 to ${judge.maxScore} against the task,`,
+          'and set "hallucination" to true only when the final answer asserts facts',
+          'not supported by the task or the trace.',
+          'Return STRICT JSON with exactly these fields:',
+          `{"finalAnswerScore": <integer 0..${judge.maxScore}>, "hallucination": <true|false>, "rationale": "<one short sentence>"}`,
+        ]),
     'Respond with ONLY that JSON object. No markdown fences. No commentary. No other fields.',
     ...(judge.rubric !== undefined ? ['Rubric:', judge.rubric] : []),
   ].join('\n')
@@ -107,29 +121,98 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
   }
 }
 
+/** Round to two decimals, avoiding float artifacts (1.0000000000000002 → 1). */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+/** Coerce a model pass value (true/false, 1/0, "true"/"false") into a boolean;
+ * anything unrecognized counts as FAIL so a sloppy model cannot inflate. */
+function asPass(value: unknown): boolean {
+  if (typeof value === 'boolean') return value
+  if (value === 1 || value === '1' || value === 'true') return true
+  return false
+}
+
+/**
+ * Compute the weighted final-answer score from per-criterion pass judgements.
+ * Weights come from the judge config — never from the model — so the model's
+ * only influence is its pass/fail answers. Labels the model omitted count as
+ * FAIL, so dropping criteria cannot inflate the score.
+ * @param criteria - the model's per-criterion judgements.
+ * @param judgeCriteria - the configured criteria with weights.
+ * @param maxScore - the configured maximum score.
+ * @returns the weighted score, rounded to two decimals.
+ */
+export function scoreFromCriteria(
+  criteria: Array<{ label: string; pass: boolean; why?: string }>,
+  judgeCriteria: JudgeCriterion[],
+  maxScore: number,
+): number {
+  const byLabel = new Map(criteria.map(c => [c.label, c.pass]))
+  let total = 0
+  let got = 0
+  for (const criterion of judgeCriteria) {
+    const weight = criterion.weight ?? 1
+    total += weight
+    if (byLabel.get(criterion.label) === true) got += weight
+  }
+  if (total === 0) return 0
+  return round2((got / total) * maxScore)
+}
+
+/** Parse a raw model criterion entry into a judgement; malformed entries drop out. */
+function parseCriterionEntry(value: unknown): { label: string; pass: boolean; why?: string } | null {
+  if (typeof value !== 'object' || value === null) return null
+  const record = value as Record<string, unknown>
+  const label = record.label
+  if (typeof label !== 'string' || label.trim() === '') return null
+  const why = record.why
+  return {
+    label,
+    pass: asPass(record.pass),
+    ...(typeof why === 'string' && why.trim() !== '' ? { why } : {}),
+  }
+}
+
 /**
  * Parse the judge model's strict-JSON reply into a verdict. Unusable output
  * yields null fields, never a fabricated verdict.
  * @param text - the raw model reply.
  * @param maxScore - the configured maximum score.
+ * @param criteria - configured judge criteria; when present, a criteria-array
+ *   verdict is parsed and weighted-scored in code (the model emits no number).
+ *   When the model still returns a legacy numeric verdict it is accepted for
+ *   backward compatibility.
  * @returns the parsed verdict.
  */
-export function parseJudgeVerdict(text: string, maxScore: number): EvalJudgeVerdict {
+export function parseJudgeVerdict(text: string, maxScore: number, criteria?: JudgeCriterion[]): EvalJudgeVerdict {
   const value = parseJsonObject(text)
   if (value === null) return { finalAnswerScore: null, hallucination: null }
-  const score = value.finalAnswerScore
   const hallucination = value.hallucination
   const rationale = value.rationale
+  const base = {
+    hallucination: typeof hallucination === 'boolean' ? hallucination : null,
+    ...(typeof rationale === 'string' && rationale.trim() !== '' ? { rationale } : {}),
+  }
+  if (criteria !== undefined && criteria.length > 0) {
+    const rawCriteria = value.criteria
+    const parsedCriteria = Array.isArray(rawCriteria)
+      ? rawCriteria.map(parseCriterionEntry).filter((entry): entry is { label: string; pass: boolean; why?: string } => entry !== null)
+      : undefined
+    if (parsedCriteria !== undefined && parsedCriteria.length > 0) {
+      return {
+        ...base,
+        finalAnswerScore: scoreFromCriteria(parsedCriteria, criteria, maxScore),
+        criteria: parsedCriteria,
+      }
+    }
+  }
+  const score = value.finalAnswerScore
   const finalAnswerScore = typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= maxScore
     ? score
     : null
-  const parsedHallucination = typeof hallucination === 'boolean' ? hallucination : null
-  const parsedRationale = typeof rationale === 'string' && rationale.trim() !== '' ? rationale : undefined
-  return {
-    finalAnswerScore,
-    hallucination: parsedHallucination,
-    ...(parsedRationale !== undefined ? { rationale: parsedRationale } : {}),
-  }
+  return { ...base, finalAnswerScore }
 }
 
 /**
@@ -147,7 +230,7 @@ export async function judgeTrial(
   chat: JudgeChat,
 ): Promise<EvalJudgeVerdict> {
   const { system, prompt } = buildJudgePrompt(caseValue, trace, judge)
-  return parseJudgeVerdict(await chat({ provider: judge.provider, model: judge.model, system, prompt }), judge.maxScore)
+  return parseJudgeVerdict(await chat({ provider: judge.provider, model: judge.model, system, prompt }), judge.maxScore, judge.criteria)
 }
 
 /**

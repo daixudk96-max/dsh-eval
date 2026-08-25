@@ -66,6 +66,15 @@ export interface BenchmarkExpectation {
   check?: string
 }
 
+/** One structured judging criterion: the LLM only answers pass/fail; the score
+ * weight lives in code (never in the prompt) so numeric bias cannot enter. */
+export interface JudgeCriterion {
+  /** Criterion text, echoed verbatim into the prompt and the verdict. */
+  label: string
+  /** Score weight; defaults to 1. Never sent to the model. */
+  weight?: number
+}
+
 /** LLM-judge configuration: scores final answers and flags hallucinations. */
 export interface BenchmarkJudge {
   /** Provider route; '' means "fall back to the effective benchmark provider". */
@@ -78,6 +87,10 @@ export interface BenchmarkJudge {
   rubricText?: string
   /** Rubric input in benchmark YAML: AES-256-GCM `v1:` envelope; decrypted at load time into `rubric`. */
   rubricCipher?: string
+  /** Structured pass/fail criteria (bit-vector scoring). When set, the judge
+   * model answers each criterion true/false and the final score is computed in
+   * code from the weights — the model never emits a number. */
+  criteria?: JudgeCriterion[]
   /** Maximum final-answer score; defaults to 10. */
   maxScore: number
   /**
@@ -247,6 +260,8 @@ export interface EvalJudgeVerdict {
   hallucination: boolean | null
   /** Judge rationale, when the model returned one. */
   rationale?: string
+  /** Per-criterion pass/fail judgements, when the judge config has criteria. */
+  criteria?: Array<{ label: string; pass: boolean; why?: string }>
 }
 
 /** Pooled grading rates over completed trials. */

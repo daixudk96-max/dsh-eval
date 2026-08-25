@@ -235,4 +235,90 @@ describe('dsh-eval judge', () => {
     const home = mkdtempSync(join(tmpdir(), 'judge-key-'))
     expect(resolveJudgeApiKey('DSH_EVAL_MISSING_KEY', home)).toBeUndefined()
   })
+
+  it('builds a criteria-based prompt with pass/fail and no numeric scoring', () => {
+    const built = buildJudgePrompt(caseValue(), trace(), judge({
+      criteria: [
+        { label: '结论点名失败风险', weight: 3 },
+        { label: '指标表完整', weight: 3 },
+      ],
+    }))
+    expect(built.system).toContain('- 结论点名失败风险')
+    expect(built.system).toContain('- 指标表完整')
+    expect(built.system).toContain('PASS (true) or FAIL (false)')
+    expect(built.system).not.toContain("Score the agent's final answer from 0 to")
+    expect(built.system).not.toContain('finalAnswerScore')
+    expect(built.system).toContain('"criteria": [{"label": "<exact criterion label>", "pass": <true|false>, "why": "<one short sentence>"}]')
+  })
+
+  it('builds the legacy numeric prompt when no criteria are configured', () => {
+    const built = buildJudgePrompt(caseValue(), trace(), judge())
+    expect(built.system).toContain('Score the agent\'s final answer from 0 to 10')
+    expect(built.system).toContain('"finalAnswerScore"')
+  })
+
+  it('scores a criteria verdict by configured weights, not model numbers', () => {
+    const text = JSON.stringify({
+      hallucination: false,
+      criteria: [
+        { label: '结论点名失败风险', pass: true, why: 'named the timeout' },
+        { label: '指标表完整', pass: false, why: 'missing latency row' },
+        { label: '中文总结通顺', pass: true, why: 'clear' },
+        { label: '无幻觉', pass: false, why: 'invented a token figure' },
+      ],
+      rationale: 'mostly solid',
+    })
+    const verdict = parseJudgeVerdict(text, 10, [
+      { label: '结论点名失败风险', weight: 3 },
+      { label: '指标表完整', weight: 3 },
+      { label: '中文总结通顺', weight: 2 },
+      { label: '无幻觉', weight: 2 },
+    ])
+    expect(verdict.finalAnswerScore).toBe(5) // (3+2) / 10 * 10
+    expect(verdict.hallucination).toBe(false)
+    expect(verdict.criteria).toHaveLength(4)
+    expect(verdict.criteria![0]).toMatchObject({ label: '结论点名失败风险', pass: true })
+  })
+
+  it('accepts 1/0 and "true"/"false" pass values', () => {
+    const text = JSON.stringify({
+      hallucination: false,
+      criteria: [
+        { label: 'A', pass: 1 },
+        { label: 'B', pass: 0 },
+        { label: 'C', pass: 'true' },
+        { label: 'D', pass: 'false' },
+      ],
+    })
+    const verdict = parseJudgeVerdict(text, 10, [{ label: 'A' }, { label: 'B' }, { label: 'C' }, { label: 'D' }])
+    expect(verdict.finalAnswerScore).toBe(5) // 2 of 4 pass
+  })
+
+  it('counts omitted criteria as FAIL so dropping them cannot inflate', () => {
+    const text = JSON.stringify({
+      hallucination: false,
+      criteria: [{ label: 'A', pass: true }],
+    })
+    const verdict = parseJudgeVerdict(text, 10, [{ label: 'A', weight: 3 }, { label: 'B', weight: 3 }])
+    expect(verdict.finalAnswerScore).toBe(5) // 3 / 6 * 10, B counts as FAIL
+    expect(verdict.criteria).toHaveLength(1)
+  })
+
+  it('accepts a legacy numeric verdict when criteria are configured but the model omits them', () => {
+    const verdict = parseJudgeVerdict('{"finalAnswerScore": 8, "hallucination": false, "rationale": "ok"}', 10, [
+      { label: 'A' },
+      { label: 'B' },
+    ])
+    expect(verdict).toEqual({ finalAnswerScore: 8, hallucination: false, rationale: 'ok' })
+  })
+
+  it('judges through the chat seam with criteria', async () => {
+    const chat = async () => JSON.stringify({
+      hallucination: false,
+      criteria: [{ label: 'A', pass: true, why: 'yes' }],
+    })
+    const verdict = await judgeTrial(caseValue(), trace(), judge({ criteria: [{ label: 'A' }] }), chat)
+    expect(verdict.finalAnswerScore).toBe(10)
+    expect(verdict.criteria).toEqual([{ label: 'A', pass: true, why: 'yes' }])
+  })
 })

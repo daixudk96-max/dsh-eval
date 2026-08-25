@@ -27,6 +27,10 @@ const judgeSchema = z.object({
   rubric: z.string().min(1).optional(),
   rubricText: z.string().min(1).optional(),
   rubricCipher: z.string().min(1).optional(),
+  criteria: z.array(z.object({
+    label: z.string().min(1),
+    weight: z.number().positive().optional(),
+  })).min(1).optional(),
   maxScore: z.number().int().positive().default(10),
   baseUrl: z.string().min(1).optional(),
   apiKeyEnv: z.string().min(1).optional(),
