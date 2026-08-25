@@ -66,6 +66,37 @@ capability 层。
 - 结论: 本轮**不 promote**(诚实原则: 引擎故障期间不强行推进; 第一轮完整证据
   显示候选效率 45→38 步, 但 epoch 校验未过, 需订阅恢复后重跑确认)。
 
+### 2.3 引擎故障期间的虚假 PASS 与 evidenceOk 修复(2026-08-25 晚)
+
+订阅故障是**间歇性**的(探测偶发 OK、运行中 400)。第三~六轮:
+
+| 轮 | baseline | candidate | 判定 | 说明 |
+|---|---|---|---|---|
+| R3 | 42 步 1.0 | 37 步(流截断) | FAIL | baseline 干净; candidate 尾部 `PI_AI_ERROR: upstream stream closed before [DONE]`, check 失败 |
+| R4 | 0 步(订阅失效) | 0 步 | INCONCLUSIVE | 双 run 引擎故障 |
+| R5 | 2 步 0.0 | 1 步 0.0 | **PASS(虚假)** | 故障 run 间效率比 1-1/2=0.5 ≥ minEffect → PASS |
+| R6 | 2 步 0.0 | 1 步 0.0 | **INVALID(修复后)** | evidenceOk 修复生效 |
+
+**R5 暴露真实缺陷**: gate 不校验 run 有效性——引擎故障的 run(0 tokens/1-2 步)
+也被效率维度比较, 1 步 vs 2 步被判「效率提升 0.5」→ 虚假 PASS。已拒绝 promote,
+并实施修复(commit 1f894e7):
+
+- `lib/run-evidence.js`(新): `runEngineFault(run)` 读 trace 尾部(最后一个
+  turn/end reason), `kind==='error'` → 引擎故障消息;case `status==='error'` 无
+  trace(启动失败)同样计为故障。纯文件证据, 无 LLM。
+- `lib/gate.js`: 新增 `evidenceOk` 开关(默认 true, 与 digestOk/epochSame 同构),
+  `false` → `INVALID: evaluation evidence invalid (engine fault during evaluation)`,
+  在任何数字比较之前返回。
+- `bin/dsh-evolve.js`: 单/多候选两条 gate 路径均接入——任一 run 故障 →
+  `evidenceOk:false` + 打印故障消息。
+- 测试: run-evidence.test.js 10 用例 + gate-efficiency.test.js +3 用例;
+  evolution-controller 全量 25 文件 0 失败。
+
+**真实验证(R6)**: 订阅再次失效(InvalidSubscription), baseline 2 步 / candidate
+1 步——与 R5 完全相同的数字, 修复后判定 `INVALID`, 不再虚假 PASS。
+故障消息如实展示: `⚠ evidence invalid: case eval-real-session trace fault:
+OpenAI API error (400): ... InvalidSubscription`。
+
 ## 3. 缺口清单(≥3 条)
 
 1. **system-presets 工具面未实现**(影响: 进化 agent 无法按声明工具工作; 建议:
@@ -77,12 +108,16 @@ capability 层。
 4. **评测引擎外部依赖无降级路径**(影响: clipa 上游订阅失效时闭环整体不可用,
    且失败被 gate 如实记录为 FAIL; 建议: 增加 provider 健康探测/多 provider 回退,
    引擎故障时标注 `engine-fault` 而非计入候选判定)。
+5. **gate 曾不校验 run 有效性**(影响: 引擎故障 run 的数字被效率维度比较,
+   1 步 vs 2 步被误判为效率提升 PASS; 建议: 已修复——`evidenceOk` 开关 +
+   trace 尾部故障检测(R6 验证 INVALID)。教训: 任何「数字比较」前必须先证
+   「数字可信」。
 
 ## 4. 结论
 
 - system-evolver 的**意图**可完整落地(proposer 独立产出候选 → CLI 闭环 → gate
   判定), 但**工具面是设计稿**, 与真实平台能力脱节——这是头号工程缺口。
 - 真实 gate 行为验证: epoch 不一致 → INVALID(第一轮); 引擎故障 → 如实 FAIL,
-  不 promote(第二轮)。诚实原则贯穿。
+  不 promote(第二轮); 修复后 → 故障 run 一律 INVALID(R6), 不再被效率维度误判。
 - 候选本身(45→38 步, 效率增益 0.156)在订阅正常的第一轮有完整证据, 但 epoch
-  校验未过; 需订阅恢复后重跑确认后再 promote。
+  校验未过; 需订阅稳定窗口重跑双 run 干净证据后, 用户批准方可 promote。
