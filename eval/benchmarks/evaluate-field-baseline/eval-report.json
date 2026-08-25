@@ -1,0 +1,66 @@
+{
+  "benchmark": "import:dsh",
+  "model": "deepseek-v4-flash:0731",
+  "createdAt": 1787626011918,
+  "trials": 1,
+  "seed": 0,
+  "pricing": null,
+  "tempRoot": "E:\\github\\dsh-eval\\eval\\benchmarks\\evaluate-field-baseline",
+  "cases": [
+    {
+      "caseId": "sample-eval",
+      "trial": 1,
+      "status": "completed",
+      "tracePath": "E:\\github\\dsh-eval\\eval\\benchmarks\\evaluate-field-baseline\\sample-session.jsonl.zstd",
+      "exitCode": null,
+      "timedOut": false,
+      "metrics": {
+        "turns": 2,
+        "steps": 15,
+        "toolCalls": 20,
+        "toolResults": 20,
+        "toolSuccess": 19,
+        "toolSuccessRate": 0.95,
+        "invalidToolCalls": 1,
+        "retries": 0,
+        "tokens": {
+          "inputTokens": 635495,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "outputTokens": 8372
+        },
+        "totalTokens": 643867,
+        "contextTokens": 635495,
+        "llmMs": 78572,
+        "toolMs": 26331,
+        "ttftMs": 49825,
+        "latencyMs": 1555860,
+        "costUsd": null
+      }
+    }
+  ],
+  "aggregate": {
+    "turns": 2,
+    "steps": 15,
+    "toolCalls": 20,
+    "toolResults": 20,
+    "toolSuccess": 19,
+    "toolSuccessRate": 0.95,
+    "invalidToolCalls": 1,
+    "retries": 0,
+    "tokens": {
+      "inputTokens": 635495,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "outputTokens": 8372
+    },
+    "totalTokens": 643867,
+    "contextTokens": 635495,
+    "llmMs": 78572,
+    "toolMs": 26331,
+    "ttftMs": 49825,
+    "latencyMs": 1555860,
+    "costUsd": null
+  },
+  "grading": null
+}

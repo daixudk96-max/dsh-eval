@@ -97,6 +97,37 @@ capability 层。
 故障消息如实展示: `⚠ evidence invalid: case eval-real-session trace fault:
 OpenAI API error (400): ... InvalidSubscription`。
 
+### 2.4 子代理评测轮(2026-08-25, 用户切换评测方式)
+
+clipa 订阅故障间歇, 用户指令改用**分发子代理评测**(subagent 默认模型):
+两个 subagent 分别注入 baseline/candidate 版 persona, 评测同一真实 session
+(`eval/benchmarks/evaluate-field-{baseline,candidate}/sample-session.jsonl.zstd`,
+112KB, 2 turns 15 steps), 各自产出 REPORT.md + eval-report.json(check.js 校验):
+
+| 证据 | baseline(原版 persona) | candidate(unattended 指令版) |
+|---|---|---|
+| 评测结果 | CHECK_PASS | CHECK_PASS |
+| 评测 agent 自报步骤 | **32**(列目录 55 会话 + 询问回退) | **23**(直接用任务给定路径) |
+| 被评测 session 指标 | 15 steps / 20 toolCalls / 95% | 同(同一 session) |
+
+- baseline subagent(bf6b28a0): 21 pwsh + 11 fs; 唯一失败 = turn1/step4 read
+  `E:\github\dsh-eval\docs\final-report.md` → `FsError: FS_NOT_FOUND`(真实文件
+  缺失, 代理自纠, 非指令违规); 询问步骤无人应答 → 按回退规则直接用给定样本。
+- candidate subagent(f57e33ba): 23 次工具调用, 直接 import+report。
+- 结论: 候选的 unattended 指令让评测 agent 少走 9 步(28% 效率提升), 报告质量
+  相同 —— 与 P3-2 proposer 假设一致(交互式 session pick 是无人值守评测瓶颈)。
+
+**第 8 轮闭环(research/evolution-subagent-gate.mjs)**: 真实 registry, baseline
+`{overall:1, correctness:1, safety:1, verification:1, steps:32}` vs candidate
+`{steps:23}` → gate **PASS**(overall gain 0.000, efficiency gain 0.281 ≥
+minEffect 0.05)→ 无 approvalId 拒绝(exit 1)→ 用户批准 → **promote
+`evaluate-94a7c40b`**(gateRunId `evr-mt82l8v7-pkxdp6`, approvalId
+`user-approved-unattended-2026-08-25`)。
+
+**当前指针**: `evaluate-94a7c40b` [active] → c4d8aec0 → ab63a9b7 → 8b9b3f03
+(4 代链); `eval/presets/evaluate-evolved/` 已同步导出(agent.cordis.yml 6478B +
+preset.yml 157B + README.md 1647B)。
+
 ## 3. 缺口清单(≥3 条)
 
 1. **system-presets 工具面未实现**(影响: 进化 agent 无法按声明工具工作; 建议:
@@ -119,5 +150,9 @@ OpenAI API error (400): ... InvalidSubscription`。
   判定), 但**工具面是设计稿**, 与真实平台能力脱节——这是头号工程缺口。
 - 真实 gate 行为验证: epoch 不一致 → INVALID(第一轮); 引擎故障 → 如实 FAIL,
   不 promote(第二轮); 修复后 → 故障 run 一律 INVALID(R6), 不再被效率维度误判。
-- 候选本身(45→38 步, 效率增益 0.156)在订阅正常的第一轮有完整证据, 但 epoch
-  校验未过; 需订阅稳定窗口重跑双 run 干净证据后, 用户批准方可 promote。
+- **最终结果**: 子代理评测轮(P3-3)提供干净证据后, 候选 promote 成功
+  (`evaluate-94a7c40b`): 效率 32→23 步(增益 0.281), 质量不变, 用户批准
+  (`user-approved-unattended-2026-08-25`)。实战闭环完整走通:
+  proposer LLM 从真实失败证据独立产出假设 → 内容变异 → seal → 双模式评测 →
+  gate PASS → 人审 promote → 指针切换 → 导出。进化对象能力实际提升:
+  evaluate preset 在无人值守评测中不再强制交互式 pick, 直接使用给定路径。

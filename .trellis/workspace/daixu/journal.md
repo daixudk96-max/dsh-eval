@@ -99,3 +99,21 @@
 - 真实闭环(临时 registry 复制品): 2 互异假设(都针对 ask-user 交互阻塞, 一个说 persona 硬编码路径+交互选择, 一个说 ask-user 工具本身)→ 并行评测 → 候选0 4步 effGain 0.2 PASS / 候选1 5步 INCONCLUSIVE → pick 候选0 → promote evaluate-66e3b543(approval user-approved-ucb-air-2026-08-25)。
 - 踩坑: ①clipa 并发请求互相抢占导致 LLM 300s 超时/ fetch failed——LLM 调用必须串行, 测试时勿并发; ②单候选 --auto 分支在多候选时也执行(浪费一次 LLM 调用)→ 包 candidateCount===1 修复; ③预算耗尽拒绝后 Node 24 Windows libuv 断言(UV_HANDLE_CLOSING, exit 0xC0000409)——proposer fetch 连接未清理的退出竞态, 功能正确, 记录不深挖; ④本环境评测 costUsd=0(pricing null), 预算只能在 newRun 层耗尽, budget-blocked 分支代码就位但真实评测中不可达(如实记录)。
 - 测试: ucb 10 + proposer-multi 9 + proposer 8 + 全量回归无失败。
+
+## 2026-08-25 实战任务收尾: evidenceOk 修复(commit 1f894e7 + 84cbb34)
+
+- R5 暴露 gate 缺陷: 引擎故障 run(0 tokens/1-2 步)被效率维度比较, 1 步 vs 2 步 → efficiencyGain 0.5 ≥ minEffect → 虚假 PASS。
+- 修复: lib/run-evidence.js(新, trace 尾部 turn/end error 检测 + case error 无 trace 检测)+ gate.js evidenceOk 开关(INVALID 优先于一切数字比较)+ dsh-evolve.js 双路径接线。
+- 测试: run-evidence 10 + gate-efficiency +3, evolution-controller 全量 25 文件 0 失败。
+- R6 真实验证: 订阅再次失效, 与 R5 相同数字(2步/1步)→ INVALID, 不再虚假 PASS。
+- 实战闭环 6 轮: R1 证据干净但 epoch 命名未过; R2/R4/R5/R6 订阅间歇失效; R3 baseline 干净 candidate 流截断。候选(45→38 步 effGain 0.156)有 R1 证据但未过 epoch 校验 → 未 promote, 待订阅稳定窗口重跑。
+- 教训: 「数字比较」前必须先证「数字可信」; 间歇性上游故障(InvalidSubscription/PI_AI_ERROR)是当前评测最大外部风险。
+
+## 2026-08-25 实战闭环完成(08-25-system-evolver-field, 待归档)
+- 子代理评测轮(用户切换评测方式): 两个 subagent 分别注入 baseline/candidate persona 评测同一真实 session; baseline 32 步(列目录 55 会话+询问回退) vs candidate 23 步(直接用路径), 均 CHECK_PASS → efficiencyGain 0.281。
+- gate PASS(整体无增益, 效率增益达标) → 用户批准 → promote evaluate-94a7c40b(gateRunId evr-mt82l8v7-pkxdp6, approvalId user-approved-unattended-2026-08-25)。
+- 指针链 4 代: 94a7c40b(active) → c4d8aec0 → ab63a9b7 → 8b9b3f03; evaluate-evolved/ 已重新导出+EVOLUTION.md 更新。
+- 脚本: research/evolution-subagent-gate.mjs(闭环, --approve 才 promote)、research/eval-subagent-collect.mjs(证据收集)。
+- 复盘: research/system-evolver-field-report.md §2.4 补子代理轮; §4 结论更新为 promote 成功。
+- 回归: evolution-controller + preset-registry 全测试 0 失败。
+- 前置: evidenceOk 修复(commit 1f894e7)让 R5 虚假 PASS → R6 INVALID。

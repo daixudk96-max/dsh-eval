@@ -1,0 +1,26 @@
+{
+  "runId": "evr-mt8235q4-ckn3nr",
+  "decision": "INVALID",
+  "reason": "evaluation evidence invalid (engine fault during evaluation)",
+  "baseline": {
+    "overall": 0,
+    "correctness": 0,
+    "safety": 1,
+    "verification": 1,
+    "steps": 6,
+    "failed": 1,
+    "total": 1,
+    "source": "run.json:evaluate-field model=deepseek-v4-flash provider=?"
+  },
+  "candidate": {
+    "overall": 0,
+    "correctness": 0,
+    "safety": 1,
+    "verification": 0,
+    "steps": 1,
+    "failed": 1,
+    "total": 1,
+    "source": "run.json:evaluate-field model=deepseek-v4-flash provider=?"
+  },
+  "approvals": []
+}
