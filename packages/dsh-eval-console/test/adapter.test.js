@@ -139,6 +139,11 @@ test('buildSnapshot assembles the full /eval/state document', () => {
   assert.equal(snapshot.current?.revisionId, CURRENT.revisionId)
   assert.equal(snapshot.history.length, HISTORY.length)
   assert.equal(snapshot.history[0]?.digestShort, 'c4d8aec0')
+  // History entries carry audit-derived timestamps (never truncated client-side).
+  assert.equal(snapshot.history[0]?.promotedAt, '2026-08-23T02:04:42.000Z')
+  assert.equal(snapshot.history[0]?.sealedAt, '2026-08-23T02:00:00.000Z')
+  // Revisions without audit records keep optional timestamps absent.
+  assert.equal(snapshot.history[1]?.promotedAt, undefined)
   assert.equal(snapshot.columns.length, 6)
   // Timeline includes sealed/gate/promoted events only (created/proposal noise
   // that the timeline surfaces? created is surfaced too — assert bounded).

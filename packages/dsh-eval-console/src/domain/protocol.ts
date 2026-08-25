@@ -33,6 +33,10 @@ export interface EvalHistoryEntry {
   digest: string
   digestShort: string
   status: 'active' | 'previous'
+  /** When the candidate was sealed (audit 'sealed' ts; ISO). */
+  sealedAt?: string
+  /** When the revision was promoted (audit 'promoted' ts; ISO). */
+  promotedAt?: string
 }
 
 /** One revision card on the board (belongs to exactly one column). */

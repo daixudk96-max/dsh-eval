@@ -26,6 +26,7 @@ import { useDismissOnOutsidePointer } from '@deepseek-ai/dsh-client-ui-primitive
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { EvalSnapshot } from '../domain/protocol.ts'
 import { HttpEvalHostTransport } from './host-api.ts'
+import { fmtTime } from './format.ts'
 
 /** Registration-side business face: none — the control reads the Host itself. */
 export interface VersionSelectInjected {
@@ -43,6 +44,8 @@ interface VersionRow {
   revisionId: string
   digestShort: string
   current: boolean
+  /** Local display timestamp (pointer updatedAt, else promotedAt, else sealedAt). */
+  ts: string | null
 }
 
 /** The session header's preset-version dropdown. */
@@ -92,11 +95,17 @@ export function VersionSelect({ t }: VersionSelectProps): ReactElement {
         revisionId: snapshot.current.revisionId,
         digestShort: snapshot.current.digestShort,
         current: true,
+        ts: snapshot.current.updatedAt,
       })
     }
     for (const entry of snapshot.history) {
       if (entry.revisionId === snapshot.current?.revisionId) continue
-      rows.push({ revisionId: entry.revisionId, digestShort: entry.digestShort, current: false })
+      rows.push({
+        revisionId: entry.revisionId,
+        digestShort: entry.digestShort,
+        current: false,
+        ts: entry.promotedAt ?? entry.sealedAt ?? null,
+      })
     }
   }
 
@@ -165,6 +174,9 @@ export function VersionSelect({ t }: VersionSelectProps): ReactElement {
                       {row.revisionId}
                     </span>
                     <span className="evc-versionRowShort">{row.digestShort}</span>
+                    {row.ts !== null ? (
+                      <span className="evc-versionRowTime" title={row.ts}>{fmtTime(row.ts)}</span>
+                    ) : null}
                     {row.current ? (
                       <span className="evc-versionRowTag">{t('version.current')}</span>
                     ) : busy ? (

@@ -862,6 +862,14 @@
   font-size: 11px;
 }
 
+.evc-versionRowTime {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--dsw-font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .evc-versionRowTag {
   flex: none;
   padding: 0 6px;

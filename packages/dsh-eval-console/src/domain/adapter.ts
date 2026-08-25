@@ -242,17 +242,23 @@ export function buildSnapshot(args: {
   const currentBar = buildCurrentBar(current)
   const rows = buildRows(history, audit, currentBar?.revisionId ?? null)
   const timeline = timelineEvents(audit).slice(-tailLimit)
+  const facts = buildRevisionFacts(audit)
   return {
     schemaVersion: 1,
     logicalId,
     revision,
     current: currentBar,
-    history: history.map((entry) => ({
-      revisionId: entry.revisionId,
-      digest: entry.digest,
-      digestShort: shortDigest(entry.digest),
-      status: entry.status,
-    })),
+    history: history.map((entry) => {
+      const fact = facts.get(entry.revisionId)
+      return {
+        revisionId: entry.revisionId,
+        digest: entry.digest,
+        digestShort: shortDigest(entry.digest),
+        status: entry.status,
+        ...(fact?.sealedAt === undefined ? {} : { sealedAt: fact.sealedAt }),
+        ...(fact?.promotedAt === undefined ? {} : { promotedAt: fact.promotedAt }),
+      }
+    }),
     columns: buildColumns(rows),
     timeline,
     generatedAt: (args.now ?? (() => new Date().toISOString()))(),
