@@ -126,3 +126,20 @@
 - AgY 执行(relay.mjs, gemini-3.7-flash-high, 后台): 4+4 工具插件 + 两预设合法化 + preset.yml + install.ps1 目录级复制 + 测试 9/9 + 全量回归 29 文件绿。真实安装到 ~/.dsh/.agent-presets/system-{evaluator,evolver}/。
 - **踩坑**: ①relay.mjs --brief 指向不存在文件报 "missing required property file_path" —— brief.md 忘写, 补齐后成功; ②AgY 在 evolution.run 加了 approve 参数透传 --approve —— 审查发现违反信任域(agent 可自造 approvalId 绕人审), 已移除(仅 CLI 侧人审), README 注明; ③.gitignore 缺失时提交会带 node_modules(本项目根已有, 未触发)。
 - 提交: 4dd839c(feat system-presets) + 035db40(chore trellis/gemini) + auto-commit archive。
+
+## 2026-08-25 — system-evolver-tools-field(已归档)
+真实进化第 N 轮(工具链驱动): executePropose→executeCandidate→executeRun 全链路验证。
+- 模型路由纠错(用户质疑驱动): 评测子进程不继承主会话设置, 由 benchmark yaml 的
+  provider/model 决定; 8-22 硬编码 clipa 致火山 ark 订阅失效(InvalidSubscription 400,
+  account 2125384065); ollama 云(https://ollama.com/v1, deepseek-v4-flash:0731)实测
+  可用, 切换后真实跑通。遗留: 其余 14 个 yaml 仍硬编码 clipa, 建议批量评估切换。
+- 最终闭环: baseline 40 步/46 toolCalls/2.95M tokens✅ vs candidate 50 步/64
+  toolCalls/3.40M tokens✅; 质量全 1.0 持平 → gate FAIL efficiency regression →
+  诚实拒绝, 不 promote, current 保持 evaluate-94a7c40b。LLM 假设(CLI 路径指令)
+  被真实评测否决(加了反而多 10 步)——Code Gate 价值验证。
+- executeRun 修复: benchmarkBaseline/benchmarkCandidate 透传(原单 --benchmark 导致
+  baseline/candidate 跑相同内容)、timeoutMs 默认 40min+err 透传(600s 固定超时被吞)。
+- 测试: system-presets 10/10, 全量 29 文件 0 失败。提交 4e1ec76/3c329b8/64fdaed。
+- 教训: ①LLM 假设必须过真实评测, 不提升不 promote(不伪造分数); ②干净证据时
+  proposer 诚实拒绝是特性不是 bug; ③评测路由/凭证/订阅是真实进化的外部依赖,
+  需显式验证。
