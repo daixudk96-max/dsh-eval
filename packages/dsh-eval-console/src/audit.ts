@@ -6,7 +6,7 @@
  * Host service polls it to detect evolution activity and re-render the board.
  */
 
-import { readFile } from 'node:fs/promises'
+import { appendFile, readFile } from 'node:fs/promises'
 import type { AuditEntry } from './domain/adapter.ts'
 
 /** Parse one ledger line; null when the line is blank or not JSON. */
@@ -62,4 +62,25 @@ export function auditTail(entries: readonly AuditEntry[], n: number): AuditEntry
 /** New entries appended since a previously observed index (empty when none). */
 export function deltaAuditEntries(entries: readonly AuditEntry[], fromIndex: number): AuditEntry[] {
   return fromIndex >= entries.length ? [] : entries.slice(fromIndex)
+}
+
+/**
+ * Append one ledger line (JSON + '\n') with a single atomic appendFile write
+ * (safe against concurrent appenders, same mode as evolution-controller's
+ * fs-store.appendLedger). Auditing is best-effort by design: a failure is
+ * logged and swallowed so a ledger problem never blocks the sync that
+ * already succeeded.
+ * @param file - absolute ledger path.
+ * @param entry - the record to append.
+ * @returns the JSON text that was appended (for tests).
+ */
+export async function appendAuditLine(file: string, entry: AuditEntry): Promise<string> {
+  const line = JSON.stringify(entry) + '\n'
+  try {
+    await appendFile(file, line, 'utf8')
+    return line
+  } catch (error) {
+    console.error(`[dsh-eval-console] audit append failed: ${file}`, error)
+    return line
+  }
 }

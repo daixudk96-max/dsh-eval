@@ -40,6 +40,22 @@ test('accepts a valid refresh envelope', () => {
   assert.deepEqual(parsed, { requestId: 'r3', action: { kind: 'refresh' } })
 })
 
+test('accepts a valid switch-revision envelope (exactKeys 2 keys, no confirm)', () => {
+  const parsed = parseActionEnvelope({ requestId: 'r5', action: { kind: 'switch-revision', revisionId: 'evaluate-94a7c40b' } })
+  assert.deepEqual(parsed, {
+    requestId: 'r5',
+    action: { kind: 'switch-revision', revisionId: 'evaluate-94a7c40b' },
+  })
+})
+
+test('rejects switch-revision with missing/extra keys or an empty revisionId', () => {
+  assert.equal(parseActionEnvelope({ requestId: 'r5', action: { kind: 'switch-revision' } }), undefined)
+  assert.equal(parseActionEnvelope({ requestId: 'r5', action: { kind: 'switch-revision', revisionId: '' } }), undefined)
+  assert.equal(parseActionEnvelope({ requestId: 'r5', action: { kind: 'switch-revision', revisionId: 'x', extra: 1 } }), undefined)
+  assert.equal(parseActionEnvelope({ requestId: 'r5', action: { kind: 'switch-revision', revisionId: 42 } }), undefined)
+  assert.equal(parseActionEnvelope({ requestId: 'r5', action: { kind: 'switch-revision', revisionId: 'x', confirm: 'ROLLBACK:x' } }), undefined)
+})
+
 test('rejects rollback with a mismatched confirm token (read-only-first guard)', () => {
   const revisionId = 'evaluate-old'
   for (const confirm of ['', 'ROLLBACK:other', 'rollback:evaluate-old', revisionId, '   ']) {

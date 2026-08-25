@@ -25,7 +25,8 @@
 import type { AuditEntry, RegistryCurrentFacts } from './domain/adapter.ts'
 import { buildSnapshot, shortDigest } from './domain/adapter.ts'
 import type { EvalAction, EvalActionResult, EvalEventPayload, EvalHistoryEntry, EvalSnapshot, EvalTimelineEvent } from './domain/protocol.ts'
-import { readAuditEntries } from './audit.ts'
+import { readAuditEntries, appendAuditLine } from './audit.ts'
+import { syncRevision } from './version-sync.ts'
 
 /** Structural subset of packages/preset-registry/lib/registry.js. */
 export interface RegistryLike {
@@ -48,6 +49,8 @@ export interface EvalConsoleHostOptions {
   logicalId: string
   /** Absolute path to the evolution-audit ledger.jsonl. */
   auditFile: string
+  /** Agent-presets install root ($DSH_HOME/.agent-presets) for switch-revision. */
+  agentPresetsRoot: string
   /** Timeline tail cap (oldest first, newest kept). Default 120. */
   tailLimit?: number
   /** Audit poll interval. Default 5000ms. */
@@ -68,6 +71,7 @@ export class EvalConsoleHostService {
   private readonly registryRoot: string
   readonly logicalId: string
   private readonly auditFile: string
+  private readonly agentPresetsRoot: string
   private readonly tailLimit: number
   private readonly pollMs: number
 
@@ -84,6 +88,7 @@ export class EvalConsoleHostService {
     this.registryRoot = options.registryRoot
     this.logicalId = options.logicalId
     this.auditFile = options.auditFile
+    this.agentPresetsRoot = options.agentPresetsRoot
     this.tailLimit = options.tailLimit ?? 120
     this.pollMs = options.pollMs ?? 5000
   }
@@ -242,6 +247,39 @@ export class EvalConsoleHostService {
       }
       case 'refresh': {
         return { ok: true, action: 'refresh', snapshot: await this.snapshot() }
+      }
+      case 'switch-revision': {
+        const digest = await this.digestForRevision(action.revisionId)
+        if (digest === null) throw new Error(`unknown revision: ${action.revisionId}`)
+        const content = await this.registry.revisionContent(digest)
+        if (content === null) {
+          throw new Error(`revision content unavailable: ${digest.slice(0, 8)}`)
+        }
+        const result = await syncRevision({
+          agentPresetsRoot: this.agentPresetsRoot,
+          logicalId: this.logicalId,
+          digest,
+          files: content.files,
+        })
+        // Best-effort audit: a ledger failure is logged by appendAuditLine and
+        // never blocks the sync result (the sync itself already succeeded).
+        await appendAuditLine(this.auditFile, {
+          op: 'audit',
+          ts: new Date().toISOString(),
+          event: 'switch-to-revision',
+          logicalId: this.logicalId,
+          revisionId: action.revisionId,
+          digest,
+          targetDir: result.dir,
+        })
+        return {
+          ok: true,
+          action: 'switch-revision',
+          revisionId: action.revisionId,
+          digest,
+          targetDir: result.dir,
+          files: content.files,
+        }
       }
     }
   }

@@ -21,6 +21,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { en, NS, zh } from './locales.ts'
 import { EvalConsoleView, type EvalConsoleInjected } from './EvalConsoleView.tsx'
+import { VersionSelect, type VersionSelectInjected } from './VersionSelect.tsx'
 import './board.css'
 
 /** Required services: the conversation slot registry and the locale service. */
@@ -46,4 +47,25 @@ export function apply(ctx: Context): void {
     label: () => t('view.title'),
     inject: (): EvalConsoleInjected => ({}),
   }, EvalConsoleView))
+
+  // The session-header preset-version dropdown. The inject face is empty —
+  // VersionSelect owns its private /eval transport, so it needs nothing from
+  // the session kit. Registration is wrapped: if the header-actions seat is
+  // unavailable (e.g. the conversation header is replaced by another preset),
+  // the view-tab fallback above still satisfies AC4.
+  ctx.slots.inject('conversation.session.header.actions', () => {
+    try {
+      return ctx.slots.register({
+        name: 'conversation.session.header.actions',
+        id: 'eval-version',
+        // After the subagent catalog and job list: version sync is a session
+        // utility, not lineage.
+        order: 30,
+        locale: NS,
+        inject: (): VersionSelectInjected => ({}),
+      }, VersionSelect)
+    } catch {
+      return () => {}
+    }
+  })
 }

@@ -1,0 +1,13 @@
+# Reference clones — never committed (research material)
+research/dsh-*/
+research/llm-space/
+_compare/
+
+# Scratch / probes
+.scratch/
+
+# Historical failed eval artifacts (kept for reference only)
+eval/benchmarks/run-short*.json
+eval/benchmarks/run-short*.err.txt
+eval/benchmarks/run-short*.out.txt
+eval/benchmarks/run-p0-judge-2026-08-23.json

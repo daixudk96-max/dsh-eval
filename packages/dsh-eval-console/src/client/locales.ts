@@ -47,6 +47,18 @@ const zh = {
   'rollback.noop': '目标已是当前版本（无变化）',
   'rollback.badConfirm': '确认短语不匹配，已拒绝',
   'action.invalid': '动作无效',
+  'version.trigger': '版本 ▾',
+  'version.triggerAria': '切换预设版本',
+  'version.listAria': '预设版本列表',
+  'version.current': '当前',
+  'version.none': '（无指针）',
+  'version.loading': '加载中…',
+  'version.empty': '暂无版本',
+  'version.switch': '切换到此版本',
+  'version.syncing': '同步中…',
+  'version.synced': '已同步到 {targetDir}，新会话可选',
+  'version.failed': '同步失败',
+  'version.noop': '目标已是当前版本（无变化）',
 } satisfies Record<string, string>
 
 const en = {
@@ -88,6 +100,18 @@ const en = {
   'rollback.noop': 'Target is already the current version (no change)',
   'rollback.badConfirm': 'Confirmation phrase mismatch, rejected',
   'action.invalid': 'Invalid action',
+  'version.trigger': 'Version ▾',
+  'version.triggerAria': 'Switch preset version',
+  'version.listAria': 'Preset versions',
+  'version.current': 'Current',
+  'version.none': '(no pointer)',
+  'version.loading': 'Loading…',
+  'version.empty': 'No versions',
+  'version.switch': 'Switch to this version',
+  'version.syncing': 'Syncing…',
+  'version.synced': 'Synced to {targetDir}; selectable in new sessions',
+  'version.failed': 'Sync failed',
+  'version.noop': 'Target is already the current version (no change)',
 } satisfies Record<string, string>
 
 export type EvalConsoleKey = keyof typeof zh

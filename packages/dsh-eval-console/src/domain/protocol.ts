@@ -102,7 +102,9 @@ export interface EvalEventPayload {
 /**
  * Result of a read-only /eval/action. `kind` discriminates the payload:
  * 'detail' carries the revision content files; 'rollback' carries the
- * registry.rollbackContent result; 'refresh' carries a fresh snapshot.
+ * registry.rollbackContent result; 'refresh' carries a fresh snapshot;
+ * 'switch-revision' carries the synced target directory (the registry
+ * pointer is never moved — only the agent-presets install directory changes).
  */
 export type EvalActionResult =
   | { ok: true; action: 'detail'; revisionId: string; digest: string; files: Record<string, string> }
@@ -117,11 +119,21 @@ export type EvalActionResult =
       noop: boolean
     }
   | { ok: true; action: 'refresh'; snapshot: EvalSnapshot }
+  | {
+      ok: true
+      action: 'switch-revision'
+      revisionId: string
+      digest: string
+      targetDir: string
+      files: Record<string, string>
+    }
 
 /**
- * Read-only-first action surface. Rollback is the only write and requires an
- * explicit confirm token (see {@link rollbackConfirmToken}); promote is never
- * reachable from the UI — it stays on the CLI/approval path.
+ * Read-only-first action surface. Rollback is the only registry write and
+ * requires an explicit confirm token (see {@link rollbackConfirmToken});
+ * promote is never reachable from the UI — it stays on the CLI/approval path.
+ * switch-revision writes the agent-presets install directory only; it never
+ * moves the registry pointer (promote semantics unchanged).
  */
 export type EvalAction =
   /** Read a revision's content files (detail modal). */
@@ -130,6 +142,8 @@ export type EvalAction =
   | { kind: 'rollback'; logicalId: string; revisionId: string; confirm: string }
   /** Force a fresh snapshot (used after a rollback lands). */
   | { kind: 'refresh' }
+  /** Sync one revision's content into the agent-presets install directory. */
+  | { kind: 'switch-revision'; revisionId: string }
 
 /** The requestId envelope wrapping one action. */
 export interface EvalActionEnvelope {
@@ -188,6 +202,12 @@ export function parseActionEnvelope(value: unknown): EvalActionEnvelope | undefi
     case 'refresh': {
       if (!exactKeys(action, ['kind'])) return undefined
       return { requestId: envelope.requestId, action: { kind: 'refresh' } }
+    }
+    case 'switch-revision': {
+      if (!exactKeys(action, ['kind', 'revisionId'])) return undefined
+      return typeof action.revisionId === 'string' && action.revisionId !== ''
+        ? { requestId: envelope.requestId, action: { kind: 'switch-revision', revisionId: action.revisionId } }
+        : undefined
     }
     default:
       return undefined

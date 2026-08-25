@@ -57,6 +57,8 @@ export interface Config {
   tailLimit?: number
   /** Audit poll interval ms. Default 5000. */
   pollMs?: number
+  /** Agent-presets install root for switch-revision syncs. Default $DSH_HOME/.agent-presets. */
+  agentPresetsRoot?: string
 }
 
 export const inject = ['webServer']
@@ -108,6 +110,7 @@ export const apply = mountOnce('dsh-eval-console', (ctx: HostContext, config?: C
     registryRoot,
     logicalId,
     auditFile,
+    agentPresetsRoot: config?.agentPresetsRoot ?? path.join(home, '.agent-presets'),
     tailLimit,
     pollMs,
   })

@@ -756,6 +756,143 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* --- preset version selector (session header dropdown) ----------------------- */
+
+.evc-versionRoot {
+  position: relative;
+  display: inline-flex;
+}
+
+.evc-versionTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 28px;
+  padding: 3px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.evc-versionTrigger:hover,
+.evc-versionTrigger:focus-visible {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.evc-versionMenu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 100;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 336px;
+  max-width: min(400px, calc(100vw - 32px));
+  max-height: min(420px, calc(100vh - 140px));
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  list-style: none;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-specific-menu);
+  box-shadow: var(--dsw-shadow-lv3);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.evc-versionRow {
+  display: flex;
+  align-items: center;
+}
+
+.evc-versionRowButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 18px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.evc-versionRowButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.evc-versionRowButton:disabled {
+  cursor: default;
+  color: var(--dsw-alias-label-primary);
+}
+
+.evc-versionRowMark {
+  flex: none;
+  width: 14px;
+  color: var(--dsw-alias-state-success-primary);
+  font-weight: 700;
+}
+
+.evc-versionRowId {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--dsw-font-mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.evc-versionRowShort {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--dsw-font-mono);
+  font-size: 11px;
+}
+
+.evc-versionRowTag {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--dsw-alias-fill-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.evc-versionRowBusy {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.evc-versionEmpty {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.evc-versionNotice {
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  border-top: 1px solid var(--dsw-alias-separator-primary);
+  color: var(--dsw-alias-state-error-primary);
+}
+
 /* --- constrained board container -------------------------------------------- */
 
 @container evc-board (max-width: 820px) {
