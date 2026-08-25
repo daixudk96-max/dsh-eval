@@ -30,6 +30,7 @@ function evaluateGate({
   holdout,
   digestOk = true,
   epochSame = true,
+  evidenceOk = true,
   ruleSetVersion = 'v1',
   rubricScore,
   rubricMinScore,
@@ -37,6 +38,14 @@ function evaluateGate({
 }) {
   if (!digestOk) return { decision: 'INVALID', reason: 'candidate digest mismatch', ruleSetVersion };
   if (!epochSame) return { decision: 'INVALID', reason: 'evaluation epoch changed', ruleSetVersion };
+  // Evidence validity: a run whose trace ends in an engine fault (upstream
+  // stream cut, subscription error, no session log) carries no trustworthy
+  // numbers — comparing its steps/tokens would be comparing garbage. Fail the
+  // gate as INVALID instead of letting a faulted 1-step run "beat" a faulted
+  // 2-step run on efficiency.
+  if (!evidenceOk) {
+    return { decision: 'INVALID', reason: 'evaluation evidence invalid (engine fault during evaluation)', ruleSetVersion };
+  }
 
   const gain = candidate.overall - baseline.overall;
 

@@ -28,6 +28,7 @@ const { spawnSync } = require('node:child_process');
 const { Registry } = require('../../preset-registry/lib/registry.js');
 const { EvolutionController } = require('../lib/controller.js');
 const { failureRecordsFromRun, summarizeFailures, formatFailureSummary } = require('../lib/failures.js');
+const { runEngineFault } = require('../lib/run-evidence.js');
 
 // ---------- 参数解析 (--key value / --key=value / 位置参数) ----------
 function parseArgs(argv) {
@@ -435,12 +436,18 @@ async function main() {
         const candidateRun = await runBenchmark({ dshLauncher, benchmarkPath: benchmarkCandidate, split, outPath });
         const cand = evalEvidence(candidateRun);
         const epochSame = epochSameOf(baselineRun, candidateRun);
-        const gateOverrides = { minEffect, ...(epochSame ? {} : { epochSame: false }) };
+        const faultMsg = runEngineFault(baselineRun) || runEngineFault(candidateRun);
+        const gateOverrides = {
+          minEffect,
+          ...(epochSame ? {} : { epochSame: false }),
+          ...(faultMsg ? { evidenceOk: false } : {}),
+        };
         const result = await controller.evaluate(r.run.id, {
           baseline: { overall: baseline.overall, correctness: baseline.correctness, safety: baseline.safety, verification: baseline.verification, steps: baseline.steps },
           candidate: { overall: cand.overall, correctness: cand.correctness, safety: cand.safety, verification: cand.verification, steps: cand.steps },
           gateOverrides,
         });
+        if (faultMsg) console.log(`gate[${r.candidateId}]: evidence invalid (${faultMsg.slice(0, 140)})`);
         const costUsd = extractCost(candidateRun);
         await controller.spendBudget('attempt', costUsd, { runId: r.run.id, candidateId: r.candidateId });
         console.log(`gate[${r.candidateId}]: ${result.decision} — ${result.gateResult.reason}`);
@@ -500,14 +507,21 @@ async function main() {
   const candidate = evalEvidence(candidateRun);
   console.log(`candidate: ${JSON.stringify(candidate)}`);
 
-  // 5. Code Gate(frozen epoch 校验: 双 run 同 epoch 才允许比较)
+  // 5. Code Gate(frozen epoch 校验: 双 run 同 epoch 才允许比较;
+  //    run 有效性校验: 任一 run 引擎故障 → INVALID, 故障 run 的数字不可比)
   const epochSame = epochSameOf(baselineRun, candidateRun);
-  const gateOverrides = { minEffect, ...(epochSame ? {} : { epochSame: false }) };
+  const faultMsg = runEngineFault(baselineRun) || runEngineFault(candidateRun);
+  const gateOverrides = {
+    minEffect,
+    ...(epochSame ? {} : { epochSame: false }),
+    ...(faultMsg ? { evidenceOk: false } : {}),
+  };
   const result = await controller.evaluate(run.id, {
     baseline: { overall: baseline.overall, correctness: baseline.correctness, safety: baseline.safety, verification: baseline.verification, steps: baseline.steps },
     candidate: { overall: candidate.overall, correctness: candidate.correctness, safety: candidate.safety, verification: candidate.verification, steps: candidate.steps },
     gateOverrides,
   });
+  if (faultMsg) console.log(`⚠ evidence invalid: ${faultMsg.slice(0, 200)}`);
   console.log(`gate: ${result.decision} — ${result.gateResult.reason}${epochSame ? '' : ' (epoch mismatch → INVALID)'}`);
 
   // 6. promote / 拒绝

@@ -89,3 +89,39 @@ test('质量增益达标 + 效率也提升 → PASS(reason 无效率说明, 主�
   assert.equal(r.decision, 'PASS');
   assert.ok(r.efficiencyGain > 0.41);
 });
+
+// ---- evidenceOk: 引擎故障 run 的数字不可比(实战 R5 暴露: 1 步 vs 2 步垃圾 run 被效率判定 PASS) ----
+
+test('evidenceOk=false → INVALID, 优先于效率判定(故障 run 不比较数字)', () => {
+  // R5 真实场景: baseline 2 步 0.0 / candidate 1 步 0.0, 双双引擎故障
+  const r = evaluateGate({
+    baseline: { overall: 0, correctness: 0, safety: 1, verification: 0, steps: 2 },
+    candidate: { overall: 0, correctness: 0, safety: 1, verification: 0, steps: 1 },
+    ...GATE,
+    evidenceOk: false,
+  });
+  assert.equal(r.decision, 'INVALID');
+  assert.match(r.reason, /evaluation evidence invalid/);
+});
+
+test('evidenceOk 默认 true → 旧行为不变(无故障输入时效率判定照常)', () => {
+  const r = evaluateGate({
+    baseline: { overall: 0, correctness: 0, safety: 1, verification: 0, steps: 2 },
+    candidate: { overall: 0, correctness: 0, safety: 1, verification: 0, steps: 1 },
+    ...GATE,
+  });
+  assert.equal(r.decision, 'PASS');
+  assert.ok(r.efficiencyGain >= 0.5);
+});
+
+test('evidenceOk=false 与 epoch mismatch 并存 → 按声明顺序 INVALID(epoch 先)', () => {
+  const r = evaluateGate({
+    baseline: { overall: 1, correctness: 1, safety: 1, verification: 1, steps: 10 },
+    candidate: { overall: 1, correctness: 1, safety: 1, verification: 1, steps: 8 },
+    ...GATE,
+    epochSame: false,
+    evidenceOk: false,
+  });
+  assert.equal(r.decision, 'INVALID');
+  assert.match(r.reason, /evaluation epoch changed/);
+});
