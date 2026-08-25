@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSH 评测 + 进化 全景讲解 —— 通俗版</title>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#1a2129; --panel2:#222c36; --line:#33404d;
+    --txt:#dbe4ee; --dim:#8fa1b3; --accent:#4da3ff; --eval:#3ddc97;
+    --evolve:#ffb454; --human:#ff6b81; --warn:#ffd166; --bad:#ff6b81;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--txt); font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; line-height:1.7; padding-bottom:80px;}
+  .wrap{max-width:960px; margin:0 auto; padding:0 24px;}
+  header{background:linear-gradient(135deg,#15232f 0%,#1a2c3d 100%); border-bottom:1px solid var(--line); padding:36px 0 28px; margin-bottom:32px;}
+  header h1{font-size:26px; color:#fff;}
+  header .sub{color:var(--dim); margin-top:6px;}
+  .hero{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px 24px; margin-bottom:32px;}
+  .hero b{color:var(--accent);}
+  .hero .big{font-size:18px; color:#fff;}
+  h2{font-size:21px; color:#fff; margin:44px 0 6px; padding-bottom:8px; border-bottom:2px solid var(--line);}
+  h2 .num{display:inline-block; background:var(--accent); color:#04121f; border-radius:6px; font-size:14px; padding:2px 9px; margin-right:10px; vertical-align:2px; font-weight:700;}
+  h2.eval .num{background:var(--eval);} h2.evolve .num{background:var(--evolve);} h2.human .num{background:var(--human);}
+  h3{font-size:16px; color:var(--evolve); margin:26px 0 8px;}
+  h3 .plain{color:var(--dim); font-weight:400; font-size:14px;}
+  p{margin:8px 0;}
+  .dim{color:var(--dim);} .small{font-size:13px;}
+  ul,ol{margin:8px 0 8px 22px;} li{margin:5px 0;}
+  code{background:#0b1016; border:1px solid var(--line); border-radius:4px; padding:1px 6px; font-size:12.5px; color:#9fd0ff; font-family:Consolas,monospace;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin:12px 0;}
+  .card b{color:#fff;}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:720px){.grid{grid-template-columns:1fr;}}
+  .box{border-radius:10px; padding:14px 16px; border:1px solid var(--line); background:var(--panel2);}
+  .box.blue{border-top:3px solid var(--accent);} .box.green{border-top:3px solid var(--eval);} .box.orange{border-top:3px solid var(--evolve);} .box.red{border-top:3px solid var(--human);}
+  .box h4{font-size:15px; margin-bottom:6px; color:#fff;}
+  .flow{display:flex; flex-direction:column; gap:0; margin:16px 0;}
+  .step{display:flex; gap:14px; align-items:flex-start;}
+  .step .n{flex:0 0 34px; height:34px; border-radius:50%; background:var(--accent); color:#04121f; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:15px;}
+  .step .n.g{background:var(--eval);} .step .n.o{background:var(--evolve);} .step .n.r{background:var(--human); color:#fff;}
+  .step .body{flex:1; padding-bottom:20px; border-left:2px solid var(--line); margin-left:16px; padding-left:16px;}
+  .step:last-child .body{border-left-color:transparent;}
+  .step .t{color:#fff; font-weight:600;}
+  .step .d{color:var(--dim); font-size:13.5px;}
+  .arrow{text-align:center; color:var(--accent); font-size:20px; margin:2px 0; user-select:none;}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:13.5px;}
+  th{background:var(--panel2); color:#fff; text-align:left; padding:8px 10px; border:1px solid var(--line);}
+  td{padding:7px 10px; border:1px solid var(--line); vertical-align:top;}
+  tr:nth-child(even) td{background:rgba(255,255,255,0.02);}
+  .ok{color:var(--eval); font-weight:700;} .no{color:var(--bad); font-weight:700;} .wait{color:var(--warn); font-weight:700;}
+  .banner{background:#1a2a1e; border:1px solid #2e5c3d; border-radius:10px; padding:12px 16px; margin:14px 0; color:#c9f0d6; font-size:14px;}
+  .banner.red{background:#2a1a1a; border-color:#5c2e2e; color:#f0c9c9;}
+  .glossary td:first-child{white-space:nowrap; font-family:Consolas,monospace; color:#9fd0ff; font-size:12.5px;}
+  .foot{margin-top:50px; color:var(--dim); font-size:12.5px; border-top:1px solid var(--line); padding-top:14px;}
+  details{margin:10px 0; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 14px;}
+  summary{cursor:pointer; color:#fff; font-weight:600; font-size:14.5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>DSH 评测 + 进化 全景讲解</h1>
+  <div class="sub">通俗版 · 所有细节都在, 只是换成了人话和图表 · 2026-08-25</div>
+</header>
+
+<div class="hero">
+  <div class="big">一句话版本:</div>
+  <p><b>评测</b> = 给 agent 考试;<b>进化</b> = 考砸了 → 改 → 重考 → 考好了 + 你点头 → 换上新版本。<br>
+  全程两条铁律: <b>改得好不好, 看考出来的分数, 不看它嘴上说</b>;<b>上线必须你批准</b>。</p>
+</div>
+
+<h2 class="eval"><span class="num">1</span>评测 = 考试(只读, 不动任何配置)</h2>
+
+<h3>1.1 考什么 · 对谁考 <span class="plain">(两种考试)</span></h3>
+<div class="grid">
+  <div class="box green">
+    <h4>考通用能力</h4>
+    <p>给默认 agent 一道编程题(比如 fix-multiply: 修一个乘法 bug)。它做完后, 自动跑判题脚本 <code>check.js</code>, 输出对了就过。</p>
+    <p class="small dim">真实例子: fix-multiply 5~7 步, 通过率 100%</p>
+  </div>
+  <div class="box green">
+    <h4>考某个 agent preset(即"考老师")</h4>
+    <p>把某个预设(比如评测老师 evaluate)放进考场: 给它一份真实会话日志(sample-session), 让它产出评测报告 REPORT.md, 判题脚本检查报告质量。</p>
+    <p class="small dim">被测对象 = workspace 里的 preset 内容(由 wrapper.cjs 注入考试环境)</p>
+  </div>
+</div>
+
+<h3>1.2 考卷长什么样 <span class="plain">(benchmark.yaml)</span></h3>
+<div class="card">
+  <p>一份考卷 = 一个 YAML 文件, 写清楚: <b>用哪个模型考</b>(provider/model)、<b>考什么</b>(每题的 prompt)、<b>考场准备</b>(workspace)、<b>怎么判卷</b>(expected.check 脚本)、<b>考几次</b>(trials)、<b>时限</b>(timeoutMs)、<b>题目分两组</b>(split: dev/guard — dev 卷平时用, guard 卷压箱底防止"背题")。</p>
+  <p class="small dim">真实例子: <code>evaluate-field-baseline-benchmark.yaml</code> — 考 evaluate preset 评测 sample-session 并写 REPORT.md</p>
+</div>
+
+<h3>1.3 考场怎么考 <span class="plain">(隔离环境, 每道题一个独立小房间)</span></h3>
+<div class="flow">
+  <div class="step"><div class="n g">1</div><div class="body"><div class="t">搭考场</div><div class="d">runner 为每道题建一个全新的临时 DSH_HOME(临时目录), 互不污染。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n g">2</div><div class="body"><div class="t">写考卷信息</div><div class="d">生成 child settings.yaml: 用考卷指定的 provider/model; 注入 API 凭证(env 优先, 否则读 ~/.dsh/.credentials.yaml)。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n g">3</div><div class="body"><div class="t">布置考试规则</div><div class="d">写 eval overlay: 只允许 workspace 写、审批关掉(无人值守)、权限用 eval 预设。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n g">4</div><div class="body"><div class="t">开考</div><div class="d">spawn <code>dsh --profile headless --patch overlay &lt;prompt&gt;</code>(或考卷指定 command, 如 wrapper.cjs 把被测 preset 内容合并进 overlay)。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n g">5</div><div class="body"><div class="t">全程录像</div><div class="d">agent 每一步都写进 session.jsonl(思考、工具调用、结果)。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n g">6</div><div class="body"><div class="t">判卷</div><div class="d">跑判题脚本 check.js(或 import 出报告指标), 得出该题"过/不过"。</div></div></div>
+</div>
+
+<h3>1.4 成绩单长什么样 <span class="plain">(run.json)</span></h3>
+<table>
+  <tr><th>成绩单字段</th><th>大白话</th><th>进化的用途</th></tr>
+  <tr><td>taskSuccess</td><td>这题过没过(判题脚本说了算)</td><td>质量</td></tr>
+  <tr><td>steps</td><td>走了多少步才做完</td><td><b>效率(少=好)</b></td></tr>
+  <tr><td>toolCalls / toolSuccessRate</td><td>调了哪些工具 / 多少成功</td><td>问题定位(哪步卡住)</td></tr>
+  <tr><td>tokens / latencyMs</td><td>花了多少 token、多久</td><td>成本</td></tr>
+  <tr><td>grade 汇总</td><td>通过率 taskSuccessRate</td><td>总质量</td></tr>
+</table>
+<div class="banner">成绩单就是进化的<code>输入</code>: 哪题没考好(失败 case)、为什么(录像)、多慢, 全在里边。</div>
+
+<h3>1.5 业务指标怎么算 <span class="plain">(判题脚本判不了的"好不好" → LLM 裁判 + 逐条判断题)</span></h3>
+<p>判题脚本只能判客观对错(输出对不对、bug 修没修好)。但"报告有没有点名失败风险"、"结论准不准"这种<b>好不好</b>, 得请 LLM 当裁判、按评分标准打。</p>
+<div class="card">
+  <p><b>2026-08-25 升级: 裁判不再打数字分, 改成逐条判断题(bit 向量)。</b>因为模型打连续分有偏见(爱给 80/90/100 的安全分), 而判断题只允许它回答"这条达标没达标"——<b>总分由代码按权重算, 模型永远看不见, 也就没法讨好</b>。</p>
+</div>
+<div class="flow">
+  <div class="step"><div class="n g">1</div><div class="body"><div class="t">考卷里写评分标准(judge.criteria, 每条带权重)</div><div class="d">
+    - 结论点名了失败/风险, 不只复述表格 …… 权重 3<br>
+    - 指标表完整(steps/tool/tokens/latency) …… 权重 3<br>
+    - 中文总结通顺、数字一致 …… 权重 2<br>
+    - 无幻觉(不编造数字) …… 权重 2<br>
+    <span class="small dim">权重只写在代码里, 不进提示词 —— 模型看不到哪条更值钱。</span>
+  </div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n g">2</div><div class="body"><div class="t">裁判逐条判 0/1(每判一句附证据 why)</div><div class="d">模型只输出:<br><code>{"criteria": [{"label": "结论点名了失败/风险", "pass": true, "why": "总结点名了 FS_NOT_FOUND 失败"}, ...]}</code><br>不输出任何数字分数。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n g">3</div><div class="body"><div class="t">代码算分(模型不参与)</div><div class="d">分数 = (通过的权重之和 ÷ 总权重) × 满分。<br>例: 前两条过、后两条挂 → (3+3)÷(3+3+2+2)×10 = <b>5 分</b>。<br>某条从"过"变"不过" = <b>维度回归</b>, 直接喂给 gate 的 rubricRegressions 检查。</div></div></div>
+</div>
+<div class="card">
+  <p><b>真实实测(2026-08-25, ollama deepseek-v4-flash:0731)</b>: 裁判 4/4 条全判过(各附一句证据), 代码算出 <b>10/10</b> 分, hallucination=false。旧数字打分方式(80/90/100)已废弃, 因为"80 和 90 差在哪"说不清 —— 现在每一条都有明确结论和理由。</p>
+</div>
+
+<h2 class="evolve"><span class="num">2</span>进化 · 考完怎么改</h2>
+
+<h3>2.1 整体链路 <span class="plain">(一个循环)</span></h3>
+<div class="flow">
+  <div class="step"><div class="n o">1</div><div class="body"><div class="t">看成绩单找问题</div><div class="d">从 run.json 里挑出失败 case 作为"失败证据"。<br><span class="small dim">干净证据(全过)→ proposer 会诚实说"没得改"(no failed cases), 不是 bug 是特性。</span></div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n o">2</div><div class="body"><div class="t">LLM 提改进方案(proposer)</div><div class="d">读失败证据, 输出: <b>假设</b>(为什么失败)、<b>证据引用</b>、<b>改动清单</b>(改哪个文件哪段)、<b>新文件内容</b>。单轮最多 3 个互不相同假设。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n r">3</div><div class="body"><div class="t">三道防线(代码自动拦截, 不由 LLM 说了算)</div><div class="d">
+    · <b>提案质量检查</b>: 没实质改动? 只改测试/注释? → 拒绝<br>
+    · <b>作弊检查(overfit)</b>: 把考题原文/答案写进新内容? → 拒绝<br>
+    · <b>危险检查(threat)</b>: 注入恶意指令/想偷凭证? → 拒绝<br>
+    <span class="small dim">所有这些都是确定性代码判定, 不靠模型自觉。</span>
+  </div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n o">4</div><div class="body"><div class="t">生成候选版本(封印)</div><div class="d">候选内容进 registry 的 staging(草稿可改), 然后 <b>封印</b>: 变成不可变版本(revision), 内容指纹(digest)锁死, 之后改一个字节都能查出来。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n o">5</div><div class="body"><div class="t">重考(同一张卷子)</div><div class="d">把候选版本再拿去跑同一份 benchmark, 得到候选成绩单。规则: 考卷本身不能变(frozen epoch), 变了整轮无效——确保考的就是同一件事。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n o">6</div><div class="body"><div class="t">裁判判定(Code Gate, 一条条自动查)</div><div class="d">详见下一节。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n r">7</div><div class="body"><div class="t">你点头(promote 人审)</div><div class="d">判定通过后, 必须你提供 approvalId 才能上线; 没有它, 系统直接拒绝(代码写死)。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="step"><div class="n o">8</div><div class="body"><div class="t">上线(指针切换)</div><div class="d">把"当前版本指针"原子地指到新版本(CAS 并发安全), 审计先落账再切换。老版本永远留底, 一句话回滚(切回指针即可)。</div></div></div>
+</div>
+
+<h3>2.2 裁判的判卷规则 <span class="plain">(Code Gate 全部判定)</span></h3>
+<table>
+  <tr><th>检查项</th><th>大白话</th><th>判什么</th></tr>
+  <tr><td>digestOk</td><td>版本内容指纹完好</td><td>不对 → 无效</td></tr>
+  <tr><td>epochSame</td><td>考卷没被换过(冻结 epoch)</td><td>换了 → 无效</td></tr>
+  <tr><td>evidenceOk</td><td>成绩单可信(引擎没故障)</td><td>故障/0 token → 无效, 不比数字</td></tr>
+  <tr><td>质量回归</td><td>正确性/安全/验证 任何一项 < 基线</td><td>降了 → 淘汰</td></tr>
+  <tr><td>效率回归</td><td>步数比基线多</td><td>更多 → 淘汰</td></tr>
+  <tr><td>增益不足</td><td>提升太小(≤ minEffect)</td><td>→ 存疑(可重测)</td></tr>
+  <tr><td>rubric 评分</td><td>LLM 裁判按评分标准打分 < 线</td><td>低 → 淘汰</td></tr>
+  <tr><td>canary / holdout</td><td>金丝雀卷 / 压箱底卷</td><td>没过 → 淘汰</td></tr>
+  <tr><td colspan="2">全部通过</td><td>→ 通过(PASS)</td></tr>
+</table>
+<div class="banner">裁判是<strong>确定性代码</strong>, 不是"LLM 自证"。任何数字比较之前, 先证明数字可信(evidenceOk)。</div>
+
+<h3>2.3 全程记账 <span class="plain">(审计)</span></h3>
+<p>registry 里有一本"流水账"(ledger.jsonl, 只增不改): 谁创建了候选、谁封印了、裁判判了什么、谁批准、谁上线, 全都记着; 机器崩溃也能重放恢复。失败的候选只记账、绝不进历史版本表。</p>
+
+<h2 class="human"><span class="num">3</span>真实例子 · 上一轮实战 <span class="plain">(evaluate preset)</span></h2>
+<div class="card">
+  <p><b>当前版本</b>: evaluate@94a7c40b(评测老师的第 6 代)</p>
+  <p><b>考卷</b>: 评测 sample 会话 → 写 REPORT.md(check.js 判卷)</p>
+  <div class="grid" style="margin-top:10px;">
+    <div class="box green"><h4>考前任版本</h4>
+      <div>40 步 · 46 次工具 · 全部成功 · <span class="ok">过 ✓</span></div>
+      <div class="small dim">质量 4 维全满分</div>
+    </div>
+    <div class="box orange"><h4>LLM 提议: "考试时它不会直接用给好的路径, 先问人"</h4>
+      <div class="small dim">改动: persona 加一行"任务已给路径就直接用"</div>
+    </div>
+  </div>
+  <div class="grid" style="margin-top:10px;">
+    <div class="box red"><h4>考候选版本</h4>
+      <div>50 步 · 64 次工具 · 全部成功 · <span class="ok">✅ ✓</span></div>
+      <div class="small dim">质量满分, 但…</div>
+    </div>
+    <div class="box red"><h4>裁判判决</h4>
+      <div><span class="no">淘汰 ✗ — 效率回归: 候选 50 步 > 基线 40 步</span></div>
+      <div class="small dim">"加了提示反而多走 10 步"</div>
+    </div>
+  </div>
+  <div class="banner" style="margin-top:12px;">结果: <b>没上线</b>, 当前版本不动, 审计留一条记录。LLM 的假设被真实分数打脸 — 这正是"分数说了算"的意义。</div>
+</div>
+
+<h2><span class="num">4</span>一图看懂全部(合体)</h2>
+<div class="card" style="font-family:Consolas,monospace; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.55;">
+┌────────────── 评测域(只读) ──────────────┐
+│ 考卷 benchmark.yaml ──→ runner 搭考场 ──→ agent 做题 ──→ 判卷 check ──▶ 成绩单 run.json
+└────────────────────────────────────────────┘
+     │ 失败 case / 步数 / token / 通过率
+     ▼
+┌────────────── 进化域(只写) ──────────────┐
+│ ① proposer 读证据提假设 ─▶ ② 三道防线拦截 ─▶ ③ 封印成候选版本
+│ ④ 重考(同卷) ─▶ ⑤ 裁判 Code Gate ─▶ ⑥ 你批准 ─▶ ⑦ 指针切换上线
+│ 全程写账(ledger), 失败候选只记账不上线, 旧版本随时回滚
+└────────────────────────────────────────────┘
+</div>
+
+<h2><span class="num">5</span>小词典 · 术语 ↔ 大白话</h2>
+<table class="glossary">
+  <tr><th>术语</th><th>大白话</th></tr>
+  <tr><td>benchmark</td><td>考卷(一份 YAML, 题 + 判卷规则)</td></tr>
+  <tr><td>case</td><td>一道题</td></tr>
+  <tr><td>run.json</td><td>成绩单</td></tr>
+  <tr><td>taskSuccess</td><td>这题过了没</td></tr>
+  <tr><td>steps</td><td>答题走了几步(越少越好)</td></tr>
+  <tr><td>failure evidence</td><td>考砸的证据(哪个 case 为什么挂)</td></tr>
+  <tr><td>proposer</td><td>出主意的 LLM(读证据 → 提假设 + 改动)</td></tr>
+  <tr><td>mutation</td><td>一处改动(改哪个文件哪段)</td></tr>
+  <tr><td>seal / revision</td><td>封印 / 不可变版本</td></tr>
+  <tr><td>digest</td><td>内容指纹(sha256, 篡改即检出)</td></tr>
+  <tr><td>epoch / frozen</td><td>考卷冻结期(防"换卷子作弊")</td></tr>
+  <tr><td>Code Gate</td><td>确定性裁判(一套 if/else 规则, 无模型参与)</td></tr>
+  <tr><td>rubric</td><td>评分标准(LLM 裁判按它打分, 加密存)</td></tr>
+  <tr><td>criteria</td><td>逐条评分标准(裁判只判每条 0/1, 分数由代码加权算, 消除数字偏见)</td></tr>
+  <tr><td>canary / holdout</td><td>金丝雀卷(试探性) / 压箱底守卫卷</td></tr>
+  <tr><td>approvalId</td><td>你的"批准"签名(promote 硬性要求)</td></tr>
+  <tr><td>promote</td><td>上线(指针切到新版本)</td></tr>
+  <tr><td>pointer / current</td><td>当前版本指针(老会话看旧版, 新会话看新版)</td></tr>
+  <tr><td>rollback</td><td>回滚(指针指回旧版, O(1) 秒回)</td></tr>
+  <tr><td>ledger</td><td>流水账(append-only, 崩溃恢复也靠它)</td></tr>
+  <tr><td>evidenceOk</td><td>成绩单可信吗(引擎故障 → 不算数)</td></tr>
+</table>
+
+<div class="foot">
+  说明: 本页内容 100% 来自项目真实实现与真实运行记录(registry、gate、runner、proposer、历次闭环数字), 与代码行为一致。<br>
+  相关文件: packages/evolution-controller/lib/gate.js · packages/preset-registry/lib/registry.js · packages/dsh-eval/lib/runner.js · research/system-evolver-tools-field-report.md
+</div>
+
+</div>
+</body>
+</html>
