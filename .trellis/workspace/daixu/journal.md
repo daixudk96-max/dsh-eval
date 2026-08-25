@@ -143,3 +143,17 @@
 - 教训: ①LLM 假设必须过真实评测, 不提升不 promote(不伪造分数); ②干净证据时
   proposer 诚实拒绝是特性不是 bug; ③评测路由/凭证/订阅是真实进化的外部依赖,
   需显式验证。
+
+## 2026-08-25 preset 版本选择器(08-25-feat-08-25-preset-version-selector, 已归档, c77e91f)
+- 需求来源: 用户发现 GUI 模式选择器看不到 registry 版本(安装目录还是 v1, 7 代进化从未同步), 调研生态后批准实施。
+- 生态调研: research/preset-version-ui-research.md — 完整功能(preset 内容版本选择器)生态空白; 组件级现成件: dsh-preset-switcher(头部下拉+热切换 recompose)、dsh-liangshen sync.ts(目录同步)、dsh-agent-preset-router(owner 标记防覆盖)、dsh-guise(库+指针+历史)。本轮不做 recompose 热切换。
+- 实现: src/version-sync.ts(syncRevision 纯函数: owner 标记 .dsh-preset-owner.json / 幂等 / 原子 staging+rename / 路径安全); protocol.ts EvalAction {kind:'switch-revision'}(exactKeys 严格校验, 无 confirm); host-service.apply() 新分支 + agentPresetsRoot 配置; audit.ts appendAuditLine(尽力而为); client VersionSelect.tsx 注册 conversation.session.header.actions(id eval-version, order 30)。promote 语义不动(UI 永不推进指针)。
+- 测试: console 37/37, evolution-controller 200/200, preset-registry 22/22; 独立 subagent 核验 PASS-WITH-NOTES(4 低危: locales 死文案/SSE 自愈/字符集/400 暴露路径)。
+- 真实验证: evaluate-94a7c40b 同步到 ~/.dsh/.agent-presets/evaluate-94a7c40b/(owner 标记, 幂等, 指针不变); 产物 research/preset-version-selector-verify.md。
+- 踩坑:
+  1. npm 11.4.2 + Node 24 arborist bug: 'Cannot read properties of null (reading '"'"'edgesOut'"'"')' @ #loadPeerSet(处理 postcss peer 时)— 删 node_modules/lock/缓存均无效; 改用 pnpm install 成功。
+  2. DSH SDK 类型缺失: @deepseek-ai/dsh-host-webserver 等 6 包用 junction 链到 E:\github\dsh\packages\(host|client)\* (lib 已构建), typecheck/build 恢复。
+  3. version-sync.ts 放 src/domain 被 client tsconfig(include src/domain, types:[])编译报 node:fs 错 → 移根 src/。
+  4. 大坑: web profile 的 node_modules/dsh-eval-console 是 symlink 指向源目录, Remove-Item 沿 symlink 把源 lib 删了 → 重新 build 恢复; 教训: 对 symlink 目标操作前先确认 LinkType。
+  5. 根 .gitignore 新增(克隆仓库/run-short 产物/scratch), 防误提交。
+- 遗留: ① GUI 重启后用户确认头部下拉 + 新会话可选 evaluate-94a7c40b; ② executeRun README 参数说明未同步(benchmarkBaseline/benchmarkCandidate/timeoutMs); ③ 14 个 benchmark yaml 仍硬编码 provider: clipa(火山订阅失效), 建议批量切 ollama。
