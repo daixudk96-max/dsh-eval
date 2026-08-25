@@ -39,7 +39,7 @@ powershell -File packages/system-presets/install.ps1
 ## 测试
 
 ```bash
-node packages/system-presets/test/evolution-tools.test.js   # 9 用例(工具契约 + 执行逻辑 + YAML 合法性)
+node packages/system-presets/test/evolution-tools.test.js   # 10 用例(工具契约 + 执行逻辑 + YAML 合法性)
 ```
 
 ## 工具面说明
@@ -49,7 +49,7 @@ node packages/system-presets/test/evolution-tools.test.js   # 9 用例(工具契
 | `evolution.propose` | 读失败 run.json + baseline 目录 → LLM 生成 `{hypothesis, evidence, mutations, candidateFiles}` → 写 outDir(proposal.json + candidate/) |
 | `evolution.mutate` | 对候选文件应用字符串替换(replace;`from` 不存在则报错) |
 | `evolution.candidate` | preset-registry `createCandidate` + `patchCandidate` + 写 staging 文件 |
-| `evolution.run` | spawn `dsh-evolve.js` 完整闭环(benchmark ×2 → gate)→ 返回 `{decision, reason, gain, efficiencyGain}`;支持 `candidate` 透传。**无 `approve` 参数**——promote 只能走 CLI 人审 |
+| `evolution.run` | spawn `dsh-evolve.js` 完整闭环(benchmark ×2 → gate)→ 返回 `{decision, reason, gain, efficiencyGain}`;支持 `candidate` 透传与 `benchmarkBaseline`/`benchmarkCandidate` 分离指定(baseline/candidate 可用不同 benchmark,使候选内容能真正进入评测环境)、`timeoutMs`(默认 2_400_000,覆盖两次评测)。**无 `approve` 参数**——promote 只能走 CLI 人审 |
 | `evaluation.run` | spawn `dsh --profile eval run <yaml> --out <json>` → 摘要 |
 | `evaluation.status` | 读 run.json → 状态/metrics 摘要 |
 | `evaluation.report` | `dsh --profile eval report <run.json>` → markdown 报告 |
