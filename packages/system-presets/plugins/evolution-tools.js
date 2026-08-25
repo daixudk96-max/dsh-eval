@@ -212,8 +212,8 @@ export async function executeCandidate(args, options = {}) {
 /** 4. evolution.run */
 export async function executeRun(args, options = {}) {
   try {
-    const { benchmark, registryRoot, logicalId, split = 'dev', minEffect = 0.05, out, candidate } = args || {};
-    if (!benchmark) throw new Error('benchmark is required');
+    const { benchmark, benchmarkBaseline, benchmarkCandidate, registryRoot, logicalId, split = 'dev', minEffect = 0.05, out, candidate, timeoutMs } = args || {};
+    if (!benchmark && !benchmarkBaseline) throw new Error('benchmark or benchmarkBaseline is required');
     if (!registryRoot) throw new Error('registryRoot is required');
     if (!logicalId) throw new Error('logicalId is required');
 
@@ -225,13 +225,22 @@ export async function executeRun(args, options = {}) {
 
     const cmdArgs = [
       dshEvolveBin,
-      '--benchmark', path.resolve(benchmark),
       '--registry', path.resolve(registryRoot),
       '--logical', logicalId,
       '--split', split,
       '--min-effect', String(minEffect),
       '--out', outDir,
     ];
+    // baseline/candidate 评测基准: 各自可被独立 yaml 覆盖(被测内容经 workspace 注入);
+    // 均缺省时回退单 benchmark(仅适用于被测内容不随候选变化的评测形态)。
+    if (benchmarkBaseline) {
+      cmdArgs.push('--benchmark-baseline', path.resolve(benchmarkBaseline));
+    } else {
+      cmdArgs.push('--benchmark', path.resolve(benchmark));
+    }
+    if (benchmarkCandidate) {
+      cmdArgs.push('--benchmark-candidate', path.resolve(benchmarkCandidate));
+    }
     if (candidate) {
       cmdArgs.push('--candidate', path.resolve(candidate));
     }
@@ -245,7 +254,21 @@ export async function executeRun(args, options = {}) {
       });
     }));
 
-    await runExecFile(process.execPath, cmdArgs, { timeout: 600000 });
+    // 闭环含两次评测(baseline + candidate), 每次最长 benchmark.timeoutMs(默认 600s),
+    // 因此 CLI 总预算必须远超单次评测预算; 默认 2_400_000ms(40min), 可经 timeoutMs 覆盖。
+    const childTimeout = Number(timeoutMs) > 0 ? Number(timeoutMs) : 2_400_000;
+    const outcome = await runExecFile(process.execPath, cmdArgs, { timeout: childTimeout });
+    if (outcome.err) {
+      const tail = String(outcome.stderr || '')
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .slice(-8)
+        .join('\n');
+      return JSON.stringify({
+        ok: false,
+        error: `dsh-evolve failed: ${outcome.err.message || String(outcome.err)}${tail ? ' — stderr tail:\n' + tail : ''}`,
+      });
+    }
 
     const gatePath = path.join(outDir, 'gate.json');
     if (fs.existsSync(gatePath)) {
@@ -352,13 +375,16 @@ export function apply(ctx, config = {}) {
     parameters: {
       type: 'object',
       properties: {
-        benchmark: { type: 'string', description: 'Benchmark YAML path' },
+        benchmark: { type: 'string', description: 'Benchmark YAML path (used for both sides unless overridden)' },
+        benchmarkBaseline: { type: 'string', description: 'Optional baseline benchmark YAML (different workspace content)' },
+        benchmarkCandidate: { type: 'string', description: 'Optional candidate benchmark YAML (different workspace content)' },
         registryRoot: { type: 'string', description: 'Preset registry root' },
         logicalId: { type: 'string', description: 'Logical preset ID' },
         split: { type: 'string', description: "Split name ('dev'|'guard', default: 'dev')" },
         minEffect: { type: 'number', description: 'Minimum effect gain threshold (default: 0.05)' },
         out: { type: 'string', description: 'Output directory for evaluation results' },
         candidate: { type: 'string', description: 'Candidate directory (optional)' },
+        timeoutMs: { type: 'number', description: 'CLI child-process timeout (default: 2400000 = 40min)' },
       },
       required: ['benchmark', 'registryRoot', 'logicalId'],
     },

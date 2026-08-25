@@ -215,6 +215,43 @@ test('evolution.run invokes dsh-evolve and parses gate.json output', async (t) =
   assert.equal(res.efficiencyGain, 0.05);
 });
 
+test('evolution.run passes benchmarkBaseline/benchmarkCandidate through argv', async (t) => {
+  const outDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'ev-run-argv-test-'));
+  t.after(() => fsp.rm(outDir, { recursive: true, force: true }));
+
+  let capturedArgv = null;
+  const mockExecFile = async (_file, argv, _opts) => {
+    capturedArgv = argv;
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(outDir, 'result.json'),
+      JSON.stringify({ status: 'rejected', reason: 'no gate' }, null, 2),
+      'utf8',
+    );
+    return { err: null, stdout: '', stderr: '' };
+  };
+
+  await evolutionTools.executeRun(
+    {
+      benchmark: 'eval/benchmarks/base.yaml',
+      benchmarkBaseline: 'eval/benchmarks/base-baseline.yaml',
+      benchmarkCandidate: 'eval/benchmarks/base-candidate.yaml',
+      registryRoot: 'fake-root',
+      logicalId: 'test-logical',
+      out: outDir,
+    },
+    { repoRoot: REPO_ROOT, execFile: mockExecFile },
+  );
+
+  assert.ok(capturedArgv, 'executeRun should spawn the CLI');
+  const joined = capturedArgv.join(' ');
+  assert.ok(joined.includes('--benchmark-baseline'), 'baseline yaml must be passed as --benchmark-baseline');
+  assert.ok(joined.includes('base-baseline.yaml'));
+  assert.ok(joined.includes('--benchmark-candidate'), 'candidate yaml must be passed as --benchmark-candidate');
+  assert.ok(joined.includes('base-candidate.yaml'));
+  assert.ok(!joined.includes('--approve'), 'approve must never be exposed through the tool plane');
+});
+
 test('evolution.propose reads failures and baseline files, generating proposal artifacts', async (t) => {
   const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'ev-propose-test-'));
   t.after(() => fsp.rm(tmpDir, { recursive: true, force: true }));
