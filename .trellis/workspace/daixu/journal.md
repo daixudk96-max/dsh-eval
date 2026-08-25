@@ -117,3 +117,12 @@
 - 复盘: research/system-evolver-field-report.md §2.4 补子代理轮; §4 结论更新为 promote 成功。
 - 回归: evolution-controller + preset-registry 全测试 0 失败。
 - 前置: evidenceOk 修复(commit 1f894e7)让 R5 虚假 PASS → R6 INVALID。
+
+## 2026-08-25 · system-presets 工具面接线(08-25-system-evolver-tools, 已归档)
+
+- 用户链: 问 system-presets 设计稿工具面接线啥意思 → 解释两条路(A 注册真实工具/B 命令型) → 用户选 A「行吧,建立吧。建立完成计划以后,调用 AgY 技能委派。按照 TRELIS 的目标去执行,你就别执行了。」
+- 机制查证(关键): DSH agent preset 的 agent.cordis.yml 是**顶层插件行列表**, 非自定义 name/tools/forbidden 结构(后者 DSH 标 broken); 工具注册 API = ctx.tools.register({name,description,parameters,output:{schema,render},execute}), 权威范例 E:\github\dsh\packages\preset\agent-presets\tests\fixtures\plugins\contribute.js; 行 name 相对路径从 preset 目录解析。
+- 前置: trellis init -u daixu --gemini 成功(.gemini/commands/trellis/ 等 9 文件, 已提交并登记 .template-hashes.json)。
+- AgY 执行(relay.mjs, gemini-3.7-flash-high, 后台): 4+4 工具插件 + 两预设合法化 + preset.yml + install.ps1 目录级复制 + 测试 9/9 + 全量回归 29 文件绿。真实安装到 ~/.dsh/.agent-presets/system-{evaluator,evolver}/。
+- **踩坑**: ①relay.mjs --brief 指向不存在文件报 "missing required property file_path" —— brief.md 忘写, 补齐后成功; ②AgY 在 evolution.run 加了 approve 参数透传 --approve —— 审查发现违反信任域(agent 可自造 approvalId 绕人审), 已移除(仅 CLI 侧人审), README 注明; ③.gitignore 缺失时提交会带 node_modules(本项目根已有, 未触发)。
+- 提交: 4dd839c(feat system-presets) + 035db40(chore trellis/gemini) + auto-commit archive。
