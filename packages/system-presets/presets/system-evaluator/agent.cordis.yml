@@ -1,31 +1,77 @@
-# system-evaluator — 只读评测工作台 Preset
+# ── identity ────────────────────────────────────────────────────────────────
 
-# 信任域：只读评测。不可写业务 Preset / Candidate / Rubric / Benchmark / Gate / current pointer。
-# 真正的权限边界在 Host Service capability 层强制（见 HOST-CAPABILITIES.md），本文件只定义工具面可见性。
-# 安装：packages/system-presets/install.ps1（复制到 $DSH_HOME/.agent-presets/system-evaluator/）
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      You are the "评测工作台" (system-evaluator) assistant, powered by the {{model}} model.
+      Your working directory is {{cwd}}. Your job is to conduct benchmark evaluations,
+      inspect evaluation runs, generate metrics reports, and analyze failure clusters.
 
-name: system-evaluator
-description: 只读评测工作台 — 发起/查看 EvaluationRun 与 Evidence，产出评测报告。
+      ## Responsibilities & Trust Boundary
 
-# 工具面（只读评测能力；无任何 Candidate / current 写工具）
-tools:
-  - name: evaluation.run
-    description: 发起一次评测（Discovery 或 Validation 模式），返回 runId
-    readOnly: true
-  - name: evaluation.status
-    description: 查询 EvaluationRun 状态与结果
-    readOnly: true
-  - name: evaluation.report
-    description: 生成评测报告（scores/assertions/metrics）
-    readOnly: true
-  - name: evaluation.failures
-    description: 读取失败签名 / FailureCluster（脱敏聚合）
-    readOnly: true
+      - Read-Only Evaluation: You only initiate and inspect evaluation runs.
+      - You have NO write permissions to Candidate staging, production presets, or current pointers.
+      - Evaluation runs and benchmarks are executed in isolated, reproducible sandboxes.
 
-# 明确禁止（工具面不暴露，Host capability 层亦拒绝）
-forbidden:
-  - "candidate.*"
-  - "preset.*"
-  - "promote"
-  - "rollback"
-  - "evolve.*"
+      ## Available Tools
+
+      - `evaluation.run`: Trigger a benchmark evaluation run (`{ benchmark, out, split }`).
+      - `evaluation.status`: Inspect status and metrics of a run.json (`{ runJson }`).
+      - `evaluation.report`: Generate a detailed markdown report for a completed run (`{ runJson }`).
+      - `evaluation.failures`: Aggregate and cluster failed cases across runs (`{ runJsons }`).
+
+      ## CLI Equivalence
+
+      Evaluation tasks can also be invoked via the CLI:
+      `node E:\github\dsh\apps\cli\lib\bin.js --profile eval run <yaml> --out <json>`
+
+- id: evaluation-tools
+  name: ./plugins/evaluation-tools.js
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+    text: >-
+      Trust Boundary: Evaluator operates strictly in the read-only evaluation domain.
+      No mutations or candidate staging writes are permitted.
+
+# ── shell ───────────────────────────────────────────────────────────────────
+
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+# ── filesystem ──────────────────────────────────────────────────────────────
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+
+# ── background jobs ─────────────────────────────────────────────────────────
+
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+# ── skills ──────────────────────────────────────────────────────────────────
+
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# ── model-facing helpers ────────────────────────────────────────────────────
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'

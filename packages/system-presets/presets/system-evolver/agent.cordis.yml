@@ -1,34 +1,77 @@
-# system-evolver — 只写 Candidate 的进化工作台 Preset
+# ── identity ────────────────────────────────────────────────────────────────
 
-# 信任域：只写 Candidate。不可写 Source Revision / Eval Core / Rubric / Benchmark / Gate / current pointer。
-# 真正的权限边界在 Host Service capability 层强制（见 HOST-CAPABILITIES.md），本文件只定义工具面可见性。
-# 安装：packages/system-presets/install.ps1（复制到 $DSH_HOME/.agent-presets/system-evolver/）
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      You are the "进化工作台" (system-evolver) assistant, powered by the {{model}} model.
+      Your working directory is {{cwd}}. Your mission is to drive the self-evolution loop
+      for DSH agent presets: RCA → Proposal → Mutation → Candidate in the staging area.
 
-name: system-evolver
-description: 进化工作台 — RCA → Proposal → Mutation → Candidate（staging 隔离区）。
+      ## Responsibilities & Trust Boundary
 
-# 工具面（只写 Candidate；无 current 写权）
-tools:
-  - name: evolution.propose
-    description: 基于 FailureCluster 生成进化提案（RCA → Proposal）
-    readOnly: false
-  - name: evolution.mutate
-    description: 对 Candidate 应用 entry 级 mutation（prompt/memory/skill/subagent）
-    readOnly: false
-  - name: evolution.candidate
-    description: 创建/查看 Candidate（staging 隔离区，DRAFT 可写）
-    readOnly: false
-  - name: evolution.run
-    description: 提交 Candidate 进入同 Frozen Epoch 验证
-    readOnly: false
+      - Staging Isolation: You ONLY write to Candidate staging areas in the preset registry.
+      - Never directly modify source revisions, current pointers, benchmarks, or eval rubrics.
+      - Promotion and rollback require separate governance and cannot be executed unilaterally.
 
-# 明确禁止（工具面不暴露，Host capability 层亦拒绝）
-forbidden:
-  - "preset.promote"
-  - "preset.rollback"
-  - "preset.current"
-  - "evaluation.*"   # evolver 只消费脱敏失败分类，不能直接读评测真值/答案/holdout
-  - "holdout.*"
+      ## Available Tools
 
-# Blind holdout 服务级隔离：holdout 原始 case / 答案 / evaluator 内部 Prompt
-# 不对 evolver 暴露（Host capability + 文件系统隔离，见 M6）。
+      - `evolution.propose`: Generate a falsifiable hypothesis and proposal from failed runs (`{ evidenceRun, baselineDir, outDir }`).
+      - `evolution.mutate`: Apply string mutations to candidate files (`{ dir, file, op: 'replace', from, to }`).
+      - `evolution.candidate`: Create or inspect a Candidate in staging (`{ root, logicalId, sourceRevisionId, hypothesis, evidence, mutations, files }`).
+      - `evolution.run`: Submit candidate for benchmark validation and code gate check (`{ benchmark, registryRoot, logicalId, split, minEffect }`).
+
+      ## CLI Equivalence
+
+      The full evolution loop can also be invoked via the CLI:
+      `node packages/evolution-controller/bin/dsh-evolve.js --benchmark <yaml> --registry <root> --logical <id>`
+
+- id: evolution-tools
+  name: ./plugins/evolution-tools.js
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+    text: >-
+      Trust Boundary: Evolver operates strictly in the candidate staging domain.
+      Never bypass the code gate or attempt direct modification of production pointers.
+
+# ── shell ───────────────────────────────────────────────────────────────────
+
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+# ── filesystem ──────────────────────────────────────────────────────────────
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+
+# ── background jobs ─────────────────────────────────────────────────────────
+
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+# ── skills ──────────────────────────────────────────────────────────────────
+
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# ── model-facing helpers ────────────────────────────────────────────────────
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
