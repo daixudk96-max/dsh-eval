@@ -278,8 +278,16 @@ async function main() {
     return;
   }
 
-  for (const required of ['benchmark', 'registry', 'logical']) {
+  for (const required of ['registry', 'logical']) {
     if (!args[required]) { usage(); console.error(`error: --${required} is required`); process.exit(2); }
+  }
+  // baseline/candidate 评测基准来源: 各自可被 --benchmark-baseline/--benchmark-candidate
+  // 覆盖(如注入不同被测内容); 均未提供时报错, 不允许只缺其一。
+  if (!args.benchmark && !args['benchmark-baseline']) {
+    usage(); console.error('error: --benchmark or --benchmark-baseline is required'); process.exit(2);
+  }
+  if (!args.benchmark && !args['benchmark-candidate']) {
+    usage(); console.error('error: --benchmark or --benchmark-candidate is required'); process.exit(2);
   }
   const registryRoot = args.registry;
   const logicalId = args.logical;

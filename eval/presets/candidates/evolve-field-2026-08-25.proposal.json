@@ -1,0 +1,13 @@
+{
+  "hypothesis": "The eval-real-session case exits 1 after a single step because the persona's default mode forces an interactive session pick, so in an unattended eval the agent asks the user and stops; adding an explicit instruction to use a task-provided session path directly will let the agent run the import and produce a report.",
+  "evidence": [
+    "case eval-real-session status=completed exit=1 steps=1"
+  ],
+  "mutations": [
+    {
+      "file": "agent.cordis.yml",
+      "op": "replace",
+      "summary": "Added an unattended-mode instruction at the top of the Default mode section: if the task already provides a session file path, use it directly and skip the listing/asking steps."
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+name: evaluate-field
+# 实战: system-evolver 驱动真实进化 (2026-08-25 field round)
+# 注意: baseline/candidate 两个 yaml 必须同名同 case(epoch 一致);
+# 被测内容差异经 workspace/command 注入, 不在 benchmarkDigest 内。
+provider: clipa
+model: deepseek-v4-flash
+reasoningEffort: max
+profile: headless
+command: [node, E:\github\dsh-eval\eval\benchmarks\evaluate-field-candidate\wrapper.cjs, --preset-src, E:\github\dsh-eval\eval\benchmarks\evaluate-field-candidate, --preset-name, evaluate-field, --provider, clipa, --model, deepseek-v4-flash, --reasoning-effort, max]
+trials: 1
+timeoutMs: 600000
+seed: 42
+cases:
+  - id: eval-real-session
+    prompt: |
+      Evaluate the DSH session log at ./sample-session.jsonl.zstd using the eval profile:
+      1. Import the session: `node E:\github\dsh\apps\cli\lib\bin.js --profile eval import dsh ./sample-session.jsonl.zstd --out eval-report.json --case-id sample-session`
+      2. Render the report: `node E:\github\dsh\apps\cli\lib\bin.js --profile eval report eval-report.json`
+      3. Write REPORT.md with the markdown metrics table (steps, tool calls, tool success, tokens, latency) and a Chinese conclusion.
+      IMPORTANT: REPORT.md MUST end with a 'Failure clusters' section listing 2-5 actionable
+      failure groups with evidence references (failed tool call ids, invalid calls, token
+      anomalies), because this section feeds the evolution loop.
+      Do not modify check.js.
+    workspace: E:\github\dsh-eval\eval\benchmarks\evaluate-field-candidate
+    expected:
+      tool: read
+      check: node check.js
