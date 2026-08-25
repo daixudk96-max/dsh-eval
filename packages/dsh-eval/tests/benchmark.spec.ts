@@ -177,6 +177,47 @@ describe('dsh-eval benchmark loading', () => {
     })
   })
 
+  it('keeps judge criteria with weights', async () => {
+    const benchmark = await parseBenchmark([
+      'name: judged',
+      'model: deepseek-v4',
+      'judge:',
+      '  provider: clipa',
+      '  criteria:',
+      '    - label: Names concrete failures',
+      '      weight: 3',
+      '    - label: No hallucinated claims',
+      'cases:',
+      '  - id: a',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
+      '',
+    ].join('\n'), tempDir())
+    expect(benchmark.judge).toEqual({
+      provider: 'clipa',
+      model: 'deepseek-v4',
+      maxScore: 10,
+      criteria: [
+        { label: 'Names concrete failures', weight: 3 },
+        { label: 'No hallucinated claims' },
+      ],
+    })
+  })
+
+  it('rejects an invalid judge criteria weight', async () => {
+    await expect(parseBenchmark([
+      'name: judged',
+      'model: m',
+      'judge:',
+      '  criteria:',
+      '    - label: A criterion',
+      '      weight: 0',
+      'cases:',
+      '  - id: a',
+      '    prompt: A sufficiently long prompt for the benchmark case.',
+      '',
+    ].join('\n'), tempDir())).rejects.toThrow()
+  })
+
   it('rejects an unknown judge field', async () => {
     await expect(parseBenchmark([
       'name: judged',

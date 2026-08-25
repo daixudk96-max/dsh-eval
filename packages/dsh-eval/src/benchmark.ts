@@ -275,6 +275,9 @@ export async function parseBenchmark(
       model: judge.model ?? parsed.model,
       ...(judge.rubric !== undefined ? { rubric: judge.rubric } : {}),
       ...(judge.rubricText !== undefined ? { rubricText: judge.rubricText } : {}),
+      ...(judge.criteria !== undefined
+        ? { criteria: judge.criteria.map((c) => (c.weight === undefined ? { label: c.label } : { label: c.label, weight: c.weight })) }
+        : {}),
       maxScore: judge.maxScore,
       ...(judge.baseUrl !== undefined ? { baseUrl: judge.baseUrl } : {}),
       ...(judge.apiKeyEnv !== undefined ? { apiKeyEnv: judge.apiKeyEnv } : {}),

@@ -74,12 +74,13 @@ describe('dsh-eval resolveJudge', () => {
       .toEqual({ provider: 'main-provider', model: 'main-model', maxScore: 10 })
   })
 
-  it('keeps explicit provider, model, rubric, and the http fallback fields', () => {
+  it('keeps explicit provider, model, rubric, criteria, and the http fallback fields', () => {
     const judge = {
       provider: 'clipa',
       model: 'judge-x',
       maxScore: 10,
       rubric: 'Be strict.',
+      criteria: [{ label: 'Names concrete failures', weight: 3 }],
       baseUrl: 'http://127.0.0.1:8317/v1',
       apiKeyEnv: 'CLIPA_API_KEY',
     } as unknown as BenchmarkJudge

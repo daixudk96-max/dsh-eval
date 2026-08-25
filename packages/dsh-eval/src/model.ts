@@ -102,6 +102,7 @@ export function resolveJudge(
     model: judge.model === undefined ? selection.model : judge.model,
     maxScore: judge.maxScore,
     ...(judge.rubric !== undefined ? { rubric: judge.rubric } : {}),
+    ...(judge.criteria !== undefined ? { criteria: judge.criteria } : {}),
     ...(judge.baseUrl !== undefined ? { baseUrl: judge.baseUrl } : {}),
     ...(judge.apiKeyEnv !== undefined ? { apiKeyEnv: judge.apiKeyEnv } : {}),
   }
