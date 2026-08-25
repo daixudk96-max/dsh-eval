@@ -1,0 +1,89 @@
+{
+  "benchmark": "evaluate-field",
+  "model": "deepseek-v4-flash",
+  "createdAt": 1787634891910,
+  "trials": 1,
+  "seed": 42,
+  "pricing": null,
+  "tempRoot": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-Lk0d8w",
+  "split": "dev",
+  "cases": [
+    {
+      "caseId": "eval-real-session",
+      "trial": 1,
+      "status": "completed",
+      "tracePath": "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-Lk0d8w\\eval-real-session-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-Lk0d8w-eval-real-session-1-workspace--\\session-ed5eace0-df1e-4321-9c29-a11415024085\\session.jsonl",
+      "tracePaths": [
+        "C:\\Users\\daixu\\AppData\\Local\\Temp\\dsh-eval-Lk0d8w\\eval-real-session-1\\dsh-home\\sessions\\--C-Users-daixu-AppData-Local-Temp-dsh-eval-Lk0d8w-eval-real-session-1-workspace--\\session-ed5eace0-df1e-4321-9c29-a11415024085\\session.jsonl"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "metrics": {
+        "turns": 1,
+        "steps": 36,
+        "toolCalls": 40,
+        "toolResults": 40,
+        "toolSuccess": 39,
+        "toolSuccessRate": 0.975,
+        "invalidToolCalls": 1,
+        "retries": 0,
+        "tokens": {
+          "inputTokens": 126769,
+          "cacheReadTokens": 2392576,
+          "cacheWriteTokens": 0,
+          "outputTokens": 30372
+        },
+        "totalTokens": 2549717,
+        "contextTokens": 2519345,
+        "llmMs": 234545,
+        "toolMs": 182557,
+        "ttftMs": 71617,
+        "latencyMs": 418384,
+        "costUsd": null
+      },
+      "grade": {
+        "taskSuccess": true,
+        "toolSelectionAccuracy": true
+      }
+    }
+  ],
+  "aggregate": {
+    "turns": 1,
+    "steps": 36,
+    "toolCalls": 40,
+    "toolResults": 40,
+    "toolSuccess": 39,
+    "toolSuccessRate": 0.975,
+    "invalidToolCalls": 1,
+    "retries": 0,
+    "tokens": {
+      "inputTokens": 126769,
+      "cacheReadTokens": 2392576,
+      "cacheWriteTokens": 0,
+      "outputTokens": 30372
+    },
+    "totalTokens": 2549717,
+    "contextTokens": 2519345,
+    "llmMs": 234545,
+    "toolMs": 182557,
+    "ttftMs": 71617,
+    "latencyMs": 418384,
+    "costUsd": null
+  },
+  "grading": {
+    "taskSuccessRate": 1,
+    "toolSelectionAccuracyRate": 1,
+    "finalAnswerScore": null,
+    "hallucinationRate": null
+  },
+  "benchmarkDigest": "4c0eb17a4666c821fec4c6a0822bd5d2622c2d16df826cfa044f0237f9835716",
+  "caseHashes": {
+    "eval-real-session": "4d18f0ffba1e03c071175df3981b90bd1f921c654365cf372c4b40c4698ead83"
+  },
+  "benchmarkSnapshot": {
+    "frozen": false,
+    "observedDigest": "4c0eb17a4666c821fec4c6a0822bd5d2622c2d16df826cfa044f0237f9835716",
+    "verified": true,
+    "mismatches": []
+  }
+}

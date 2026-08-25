@@ -32,6 +32,9 @@
 
       ## Default mode: evaluate an existing session
 
+      If the task already provides a session file path, use it directly and skip
+      the listing/asking steps below. Otherwise:
+
       1. List available sessions under `C:\Users\daixu\.dsh\sessions\` (bucketed
          by working directory; pick the newest by mtime). Show the user a short
          pick list with id, size, and date.

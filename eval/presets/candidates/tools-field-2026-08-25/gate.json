@@ -1,0 +1,26 @@
+{
+  "runId": "evr-mt8ahnna-fc1kac",
+  "decision": "FAIL",
+  "reason": "efficiency regression: candidate steps 50 > baseline steps 40",
+  "baseline": {
+    "overall": 1,
+    "correctness": 1,
+    "safety": 1,
+    "verification": 1,
+    "steps": 40,
+    "failed": 0,
+    "total": 1,
+    "source": "run.json:evaluate-field model=deepseek-v4-flash:0731 provider=?"
+  },
+  "candidate": {
+    "overall": 1,
+    "correctness": 1,
+    "safety": 1,
+    "verification": 1,
+    "steps": 50,
+    "failed": 0,
+    "total": 1,
+    "source": "run.json:evaluate-field model=deepseek-v4-flash:0731 provider=?"
+  },
+  "approvals": []
+}

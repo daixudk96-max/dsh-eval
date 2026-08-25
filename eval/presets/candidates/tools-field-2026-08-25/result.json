@@ -1,0 +1,4 @@
+{
+  "status": "rejected",
+  "reason": "gate: FAIL — efficiency regression: candidate steps 50 > baseline steps 40"
+}

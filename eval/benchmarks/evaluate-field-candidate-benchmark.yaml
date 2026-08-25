@@ -2,13 +2,13 @@ name: evaluate-field
 # 实战: system-evolver 驱动真实进化 (2026-08-25 field round)
 # 注意: baseline/candidate 两个 yaml 必须同名同 case(epoch 一致);
 # 被测内容差异经 workspace/command 注入, 不在 benchmarkDigest 内。
-provider: clipa
-model: deepseek-v4-flash
+provider: ollama
+model: deepseek-v4-flash:0731
 reasoningEffort: max
 profile: headless
-command: [node, E:\github\dsh-eval\eval\benchmarks\evaluate-field-candidate\wrapper.cjs, --preset-src, E:\github\dsh-eval\eval\benchmarks\evaluate-field-candidate, --preset-name, evaluate-field, --provider, clipa, --model, deepseek-v4-flash, --reasoning-effort, max]
+command: [node, E:\github\dsh-eval\eval\benchmarks\evaluate-field-candidate\wrapper.cjs, --preset-src, E:\github\dsh-eval\eval\benchmarks\evaluate-field-candidate, --preset-name, evaluate-field, --provider, ollama, --model, deepseek-v4-flash:0731, --reasoning-effort, max]
 trials: 1
-timeoutMs: 600000
+timeoutMs: 1500000
 seed: 42
 cases:
   - id: eval-real-session
@@ -25,3 +25,4 @@ cases:
     expected:
       tool: read
       check: node check.js
+
