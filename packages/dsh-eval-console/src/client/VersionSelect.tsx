@@ -46,6 +46,8 @@ interface VersionRow {
   current: boolean
   /** Local display timestamp (pointer updatedAt, else promotedAt, else sealedAt). */
   ts: string | null
+  /** One-line candidate hypothesis — what this revision changed. */
+  summary: string | null
 }
 
 /** The session header's preset-version dropdown. */
@@ -91,11 +93,14 @@ export function VersionSelect({ t }: VersionSelectProps): ReactElement {
   const rows: VersionRow[] = []
   if (snapshot !== null) {
     if (snapshot.current !== null) {
+      const currentSummary =
+        snapshot.history.find((entry) => entry.revisionId === snapshot.current?.revisionId)?.summary ?? null
       rows.push({
         revisionId: snapshot.current.revisionId,
         digestShort: snapshot.current.digestShort,
         current: true,
         ts: snapshot.current.updatedAt,
+        summary: currentSummary,
       })
     }
     for (const entry of snapshot.history) {
@@ -105,6 +110,7 @@ export function VersionSelect({ t }: VersionSelectProps): ReactElement {
         digestShort: entry.digestShort,
         current: false,
         ts: entry.promotedAt ?? entry.sealedAt ?? null,
+        summary: entry.summary ?? null,
       })
     }
   }
@@ -169,18 +175,23 @@ export function VersionSelect({ t }: VersionSelectProps): ReactElement {
                     title={row.current ? undefined : t('version.switch')}
                     onClick={() => void switchTo(row)}
                   >
-                    <span className="evc-versionRowMark" aria-hidden="true">{row.current ? '✓' : ''}</span>
-                    <span className="evc-versionRowId" title={row.revisionId}>
-                      {row.revisionId}
+                    <span className="evc-versionRowLine">
+                      <span className="evc-versionRowMark" aria-hidden="true">{row.current ? '✓' : ''}</span>
+                      <span className="evc-versionRowId" title={row.revisionId}>
+                        {row.revisionId}
+                      </span>
+                      <span className="evc-versionRowShort">{row.digestShort}</span>
+                      {row.ts !== null ? (
+                        <span className="evc-versionRowTime" title={row.ts}>{fmtTime(row.ts)}</span>
+                      ) : null}
+                      {row.current ? (
+                        <span className="evc-versionRowTag">{t('version.current')}</span>
+                      ) : busy ? (
+                        <span className="evc-versionRowBusy">{t('version.syncing')}</span>
+                      ) : null}
                     </span>
-                    <span className="evc-versionRowShort">{row.digestShort}</span>
-                    {row.ts !== null ? (
-                      <span className="evc-versionRowTime" title={row.ts}>{fmtTime(row.ts)}</span>
-                    ) : null}
-                    {row.current ? (
-                      <span className="evc-versionRowTag">{t('version.current')}</span>
-                    ) : busy ? (
-                      <span className="evc-versionRowBusy">{t('version.syncing')}</span>
+                    {row.summary !== null ? (
+                      <span className="evc-versionRowSummary" title={row.summary}>{row.summary}</span>
                     ) : null}
                   </button>
                 </li>

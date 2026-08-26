@@ -37,6 +37,8 @@ export interface EvalHistoryEntry {
   sealedAt?: string
   /** When the revision was promoted (audit 'promoted' ts; ISO). */
   promotedAt?: string
+  /** One-line candidate hypothesis — what this revision changed. */
+  summary?: string
 }
 
 /** One revision card on the board (belongs to exactly one column). */
@@ -53,6 +55,8 @@ export interface EvalStatusRow {
   gateReason?: string
   /** When the revision was promoted (audit 'promoted' ts; ISO). */
   promotedAt?: string
+  /** One-line candidate hypothesis — what this revision changed. */
+  summary?: string
   /** True for the live current pointer. */
   isCurrent: boolean
   /** Position in the history chain: 0 = newest (current), then previous. */

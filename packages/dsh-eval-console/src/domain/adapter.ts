@@ -57,6 +57,9 @@ export interface RevisionFacts {
   revisionId: string
   digest: string
   runId?: string
+  /** Candidate hypothesis (audit 'candidate-created' text) — one-line "what
+   * this revision changed" summary shown in version pickers. */
+  hypothesis?: string
   sealedAt?: string
   promotedAt?: string
   /** Latest gate outcome for the run (to: status, reason). */
@@ -79,6 +82,8 @@ function record(value: unknown): Record<string, unknown> | undefined {
 export function buildRevisionFacts(audit: readonly AuditEntry[]): Map<string, RevisionFacts> {
   const facts = new Map<string, RevisionFacts>()
   const byRun = new Map<string, string>()
+  // hypothesis rides candidate-created (before sealed), keyed by runId.
+  const hypothesisByRun = new Map<string, string>()
 
   const ensure = (revisionId: string): RevisionFacts => {
     let fact = facts.get(revisionId)
@@ -94,7 +99,11 @@ export function buildRevisionFacts(audit: readonly AuditEntry[]): Map<string, Re
     if (typeof event !== 'string') continue
     const runId = typeof entry.runId === 'string' ? entry.runId : undefined
     const ts = typeof entry.ts === 'string' ? entry.ts : undefined
-    if (event === 'sealed') {
+    if (event === 'candidate-created') {
+      if (runId !== undefined && typeof entry.hypothesis === 'string' && entry.hypothesis !== '') {
+        hypothesisByRun.set(runId, entry.hypothesis)
+      }
+    } else if (event === 'sealed') {
       const revisionId = typeof entry.revisionId === 'string' ? entry.revisionId : undefined
       const digest = typeof entry.digest === 'string' ? entry.digest : ''
       if (revisionId === undefined) continue
@@ -103,6 +112,8 @@ export function buildRevisionFacts(audit: readonly AuditEntry[]): Map<string, Re
       if (runId !== undefined) {
         fact.runId = runId
         byRun.set(runId, revisionId)
+        const hypothesis = hypothesisByRun.get(runId)
+        if (hypothesis !== undefined) fact.hypothesis = hypothesis
       }
       if (ts !== undefined) fact.sealedAt = ts
     } else if (event === 'gate') {
@@ -171,6 +182,7 @@ export function buildRows(
       ...(fact?.runId === undefined ? {} : { runId: fact.runId }),
       ...(fact?.sealedAt === undefined ? {} : { sealedAt: fact.sealedAt }),
       ...(fact?.promotedAt === undefined ? {} : { promotedAt: fact.promotedAt }),
+      ...(fact?.hypothesis === undefined ? {} : { summary: fact.hypothesis }),
     })
   })
 
@@ -190,6 +202,7 @@ export function buildRows(
       ...(fact.sealedAt === undefined ? {} : { sealedAt: fact.sealedAt }),
       ...(fact.gate === undefined || fact.gate.reason === undefined ? {} : { gateReason: fact.gate.reason }),
       ...(fact.promotedAt === undefined ? {} : { promotedAt: fact.promotedAt }),
+      ...(fact.hypothesis === undefined ? {} : { summary: fact.hypothesis }),
     })
   })
 
@@ -257,6 +270,7 @@ export function buildSnapshot(args: {
         status: entry.status,
         ...(fact?.sealedAt === undefined ? {} : { sealedAt: fact.sealedAt }),
         ...(fact?.promotedAt === undefined ? {} : { promotedAt: fact.promotedAt }),
+        ...(fact?.hypothesis === undefined ? {} : { summary: fact.hypothesis }),
       }
     }),
     columns: buildColumns(rows),

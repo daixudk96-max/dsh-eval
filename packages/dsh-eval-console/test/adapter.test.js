@@ -33,6 +33,7 @@ const HISTORY = [
 
 const AUDIT = [
   { op: 'audit', ts: '2026-08-23T01:50:00.000Z', runId: 'evr-mt55ya37-ta3ww5', event: 'created' },
+  { op: 'audit', ts: '2026-08-23T01:59:50.000Z', runId: 'evr-mt55ya37-ta3ww5', event: 'candidate-created', candidateId: 'cand-x1', hypothesis: 'Add an unattended-mode instruction: use the provided session path directly and skip listing/asking.' },
   { op: 'audit', ts: '2026-08-23T02:00:00.000Z', runId: 'evr-mt55ya37-ta3ww5', event: 'sealed', revisionId: 'evaluate-c4d8aec0', digest: CURRENT.digest },
   { op: 'audit', ts: '2026-08-23T02:04:00.000Z', runId: 'evr-mt55ya37-ta3ww5', event: 'gate', from: 'EVALUATING', to: 'ACCEPTED', decision: 'PASS', reason: 'all code gates passed' },
   { op: 'audit', ts: '2026-08-23T02:04:42.000Z', runId: 'evr-mt55ya37-ta3ww5', event: 'promoted', revisionId: 'evaluate-c4d8aec0', digest: CURRENT.digest, approvalId: 'user-approved-p3-governance-2026-08-23' },
@@ -65,6 +66,10 @@ test('buildRevisionFacts folds sealed/gate/promoted into per-revision facts', ()
   assert.equal(current.gate?.to, 'ACCEPTED')
   assert.equal(current.gate?.reason, 'all code gates passed')
   assert.equal(current.promotedAt, '2026-08-23T02:04:42.000Z')
+  assert.equal(
+    current.hypothesis,
+    'Add an unattended-mode instruction: use the provided session path directly and skip listing/asking.',
+  )
   // Sealed-only revision: no gate, no promotion.
   const sealOnly = facts.get('evaluate-seal001')
   assert.ok(sealOnly !== undefined)
@@ -142,6 +147,8 @@ test('buildSnapshot assembles the full /eval/state document', () => {
   // History entries carry audit-derived timestamps (never truncated client-side).
   assert.equal(snapshot.history[0]?.promotedAt, '2026-08-23T02:04:42.000Z')
   assert.equal(snapshot.history[0]?.sealedAt, '2026-08-23T02:00:00.000Z')
+  // History entries carry the one-line candidate hypothesis (summary).
+  assert.match(snapshot.history[0]?.summary ?? '', /unattended-mode instruction/)
   // Revisions without audit records keep optional timestamps absent.
   assert.equal(snapshot.history[1]?.promotedAt, undefined)
   assert.equal(snapshot.columns.length, 6)
