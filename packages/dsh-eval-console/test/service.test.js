@@ -192,6 +192,132 @@ test('switch-revision: missing revision content throws', async () => {
   }
 })
 
+test('sessionPresetOf: last agent-preset/selected event wins (newest first scan)', async () => {
+  const dirs = await tmpDirs()
+  try {
+    const persistence = {
+      async inspect(sessionId) {
+        assert.equal(sessionId, '11111111-2222-4333-8444-555555555555')
+        return {
+          meta: { agentPreset: 'older-preset' },
+          events: [
+            { type: 'agent-preset/selected', seq: 1, data: { agentPreset: 'first' } },
+            { type: 'something-else', seq: 2 },
+            { type: 'agent-preset/selected', seq: 3, data: { agentPreset: 'evaluate' } },
+          ],
+        }
+      },
+    }
+    const service = new EvalConsoleHostService({
+      registry: mockRegistry(),
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: LOGICAL,
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+      sessionPersistence: persistence,
+    })
+    assert.equal(await service.sessionPresetOf('11111111-2222-4333-8444-555555555555'), 'evaluate')
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true })
+  }
+})
+
+test('sessionPresetOf: no event falls back to the header meta.agentPreset', async () => {
+  const dirs = await tmpDirs()
+  try {
+    const persistence = {
+      async inspect() {
+        return { meta: { agentPreset: 'deep-mindmap' }, events: [] }
+      },
+    }
+    const service = new EvalConsoleHostService({
+      registry: mockRegistry(),
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: LOGICAL,
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+      sessionPersistence: persistence,
+    })
+    assert.equal(await service.sessionPresetOf('any'), 'deep-mindmap')
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true })
+  }
+})
+
+test('sessionPresetOf: unreadable session or missing service yields null', async () => {
+  const dirs = await tmpDirs()
+  try {
+    // inspect returns null → null.
+    const nullPersistence = {
+      async inspect() {
+        return null
+      },
+    }
+    const serviceWithNull = new EvalConsoleHostService({
+      registry: mockRegistry(),
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: LOGICAL,
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+      sessionPersistence: nullPersistence,
+    })
+    assert.equal(await serviceWithNull.sessionPresetOf('any'), null)
+
+    // inspect throws → null.
+    const throwingPersistence = {
+      async inspect() {
+        throw new Error('boom')
+      },
+    }
+    const serviceWithThrow = new EvalConsoleHostService({
+      registry: mockRegistry(),
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: LOGICAL,
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+      sessionPersistence: throwingPersistence,
+    })
+    assert.equal(await serviceWithThrow.sessionPresetOf('any'), null)
+
+    // No persistence service at all → null.
+    const bareService = new EvalConsoleHostService({
+      registry: mockRegistry(),
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: LOGICAL,
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+    })
+    assert.equal(await bareService.sessionPresetOf('any'), null)
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true })
+  }
+})
+
+test('sessionPresetOf: no agentPreset anywhere yields null', async () => {
+  const dirs = await tmpDirs()
+  try {
+    const persistence = {
+      async inspect() {
+        return {
+          meta: { id: 'some-session' },
+          events: [{ type: 'agent-message', data: {} }],
+        }
+      },
+    }
+    const service = new EvalConsoleHostService({
+      registry: mockRegistry(),
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: LOGICAL,
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+      sessionPersistence: persistence,
+    })
+    assert.equal(await service.sessionPresetOf('any'), null)
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true })
+  }
+})
+
 test('snapshot: per-logical query — preset without a chain yields current null + empty history', async () => {
   const dirs = await tmpDirs()
   try {

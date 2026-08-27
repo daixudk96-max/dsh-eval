@@ -21,7 +21,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
-import type { RegistryLike } from './host-service.ts'
+import type { RegistryLike, SessionPersistenceLike } from './host-service.ts'
 import { EvalConsoleHostService } from './host-service.ts'
 import { makeEvalRoutes } from './host-routes.ts'
 
@@ -35,6 +35,8 @@ export interface HostContext {
   webServer: {
     register(route: WebRoute): () => void
   }
+  /** Optional service lookup (the sessionPersistence service is optional). */
+  get<T = unknown>(name: string): T | undefined
   effect(fn: () => (() => void) | void, name?: string): void
 }
 
@@ -105,12 +107,17 @@ export const apply = mountOnce('dsh-eval-console', (ctx: HostContext, config?: C
   const pollMs = config?.pollMs ?? 5000
 
   const registry: RegistryLike = new presetRegistryModule.Registry({ root: registryRoot })
+  // Optional: the DSH sessionPersistence service tells us which preset a
+  // stored session runs with (the session-port store exposes no agentPreset).
+  // Absent (host composition without it) → the version selector hides.
+  const sessionPersistence = ctx.get<SessionPersistenceLike>('sessionPersistence')
   const service = new EvalConsoleHostService({
     registry,
     registryRoot,
     logicalId,
     auditFile,
     agentPresetsRoot: config?.agentPresetsRoot ?? path.join(home, '.agent-presets'),
+    ...(sessionPersistence === undefined ? {} : { sessionPersistence }),
     tailLimit,
     pollMs,
   })

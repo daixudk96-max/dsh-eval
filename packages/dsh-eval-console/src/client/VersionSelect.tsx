@@ -58,11 +58,14 @@ interface VersionRow {
 }
 
 /** The session header's preset-version dropdown. */
-export function VersionSelect({ sessionId, useSessions, t }: VersionSelectProps): ReactElement {
+export function VersionSelect({ sessionId, t }: VersionSelectProps): ReactElement {
   // The version chain is bound to the *session's* preset: no preset recorded,
   // or a preset with no registry chain, means no control at all.
-  const preset = useSessions(state => state.byId[sessionId]?.agentPreset)
+  // The session's preset is resolved Host-side via sessionPersistence.inspect
+  // (the session-port store exposes no agentPreset field), through
+  // GET /eval/session-preset?sessionId=<uuid>.
   const transport = useMemo(() => new HttpEvalHostTransport(), [])
+  const [preset, setPreset] = useState<string | null | undefined>(undefined)
   const [snapshot, setSnapshot] = useState<EvalSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -72,8 +75,24 @@ export function VersionSelect({ sessionId, useSessions, t }: VersionSelectProps)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
 
+  useEffect(() => {
+    let cancelled = false
+    transport
+      .sessionPreset(sessionId)
+      .then((result) => {
+        if (!cancelled) setPreset(result.presetId)
+      })
+      .catch(() => {
+        // Unreadable session (or Host without sessionPersistence): no control.
+        if (!cancelled) setPreset(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [transport, sessionId])
+
   const refresh = useCallback(async () => {
-    if (preset === undefined) return
+    if (preset === undefined || preset === null) return
     try {
       const next = await transport.state(preset)
       revisionRef.current = next.revision
@@ -100,6 +119,7 @@ export function VersionSelect({ sessionId, useSessions, t }: VersionSelectProps)
   // nothing at all — an empty trigger for a data source that never arrives is
   // worse than no control. (The board tab still shows load errors in full.)
   if (preset === undefined) return <></>
+  if (preset === null) return <></>
   if (error !== null) return <></>
   // Versions are bound to a preset: a preset without a registry chain
   // (no current pointer, no history) gets no version control.

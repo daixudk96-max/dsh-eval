@@ -40,6 +40,15 @@ export interface RegistryLike {
   ): Promise<{ ok: boolean; noop?: boolean; edits?: number; revisionId: string; digest: string }>
 }
 
+/**
+ * Structural subset of the DSH sessionPersistence service (inspect only) —
+ * the official API preset-switcher-style plugins use to read a stored
+ * session's meta + events (handles the backend's multi-frame zstd container).
+ */
+export interface SessionPersistenceLike {
+  inspect(sessionId: string): Promise<{ meta?: unknown; events?: unknown[] } | null>
+}
+
 export interface EvalConsoleHostOptions {
   /** The preset-registry Registry instance (owned by the caller). */
   registry: RegistryLike
@@ -51,6 +60,13 @@ export interface EvalConsoleHostOptions {
   auditFile: string
   /** Agent-presets install root ($DSH_HOME/.agent-presets) for switch-revision. */
   agentPresetsRoot: string
+  /**
+   * Optional DSH sessionPersistence service. When present, the console can
+   * resolve the preset a session runs with (last `agent-preset/selected`
+   * event, else the session header) so the version control binds to the
+   * session's actual preset. Absent → sessionPresetOf() returns null.
+   */
+  sessionPersistence?: SessionPersistenceLike
   /** Timeline tail cap (oldest first, newest kept). Default 120. */
   tailLimit?: number
   /** Audit poll interval. Default 5000ms. */
@@ -74,6 +90,7 @@ export class EvalConsoleHostService {
   private readonly agentPresetsRoot: string
   private readonly tailLimit: number
   private readonly pollMs: number
+  private readonly sessionPersistence: SessionPersistenceLike | undefined
 
   private readonly listeners = new Set<EvalConsoleListener>()
   private timer: ReturnType<typeof setInterval> | undefined
@@ -89,6 +106,7 @@ export class EvalConsoleHostService {
     this.logicalId = options.logicalId
     this.auditFile = options.auditFile
     this.agentPresetsRoot = options.agentPresetsRoot
+    this.sessionPersistence = options.sessionPersistence
     this.tailLimit = options.tailLimit ?? 120
     this.pollMs = options.pollMs ?? 5000
   }
@@ -299,6 +317,44 @@ export class EvalConsoleHostService {
         }
       }
     }
+  }
+
+  /**
+   * Resolve the preset a stored session runs with — the last
+   * `agent-preset/selected` event (newest wins, mirroring DSH's own
+   * resolveSessionPreset), else the session header's agentPreset, else null.
+   *
+   * Requires the injected sessionPersistence service; unreadable/unknown
+   * sessions and a missing service both yield null (the caller then renders
+   * no version control — a preset we cannot identify has no versions).
+   */
+  async sessionPresetOf(sessionId: string): Promise<string | null> {
+    const persistence = this.sessionPersistence
+    if (persistence === undefined) return null
+    let inspected: { meta?: unknown; events?: unknown[] } | null
+    try {
+      inspected = await persistence.inspect(sessionId)
+    } catch {
+      return null
+    }
+    if (inspected === null || typeof inspected !== 'object') return null
+    const events = Array.isArray(inspected.events) ? inspected.events : []
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const event = events[i]
+      if (event === null || typeof event !== 'object') continue
+      const record = event as { type?: unknown; data?: unknown }
+      if (record.type !== 'agent-preset/selected') continue
+      const data = record.data
+      if (data === null || typeof data !== 'object') continue
+      const value = (data as { agentPreset?: unknown }).agentPreset
+      if (typeof value === 'string' && value !== '') return value
+    }
+    const meta = inspected.meta
+    if (meta !== null && typeof meta === 'object') {
+      const value = (meta as { agentPreset?: unknown }).agentPreset
+      if (typeof value === 'string' && value !== '') return value
+    }
+    return null
   }
 
   /** Current timeline (for tests/debugging); tail capped. */

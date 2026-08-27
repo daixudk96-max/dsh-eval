@@ -29,6 +29,9 @@ const HEARTBEAT_MS = 15_000
  */
 const LOGICAL_ID_RE = /^[a-z0-9][a-z0-9-]*$/
 
+/** Session ids feed sessionPersistence.inspect — accept the uuid shape only. */
+const SESSION_ID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+
 /** Loopback socket addresses (IPv4, IPv6, IPv4-mapped IPv6). */
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
@@ -75,6 +78,23 @@ export function makeEvalRoutes(service: EvalConsoleHostService): WebRoute[] {
         return writeJson(res, 400, { ok: false, error: 'invalid-logical' }, { 'cache-control': 'no-store' })
       }
       writeJson(res, 200, await service.snapshot(logical ?? undefined), { 'cache-control': 'no-store' })
+    },
+  }
+
+  const sessionPreset: WebRoute = {
+    kind: 'exact',
+    path: `${EVAL_API_PREFIX}/session-preset`,
+    handler: async (req, res): Promise<void> => {
+      if (req.method !== 'GET') {
+        return writeJson(res, 405, { ok: false, error: 'method-not-allowed' }, { 'cache-control': 'no-store' })
+      }
+      if (!guard(req, res)) return
+      const sessionId = new URL(req.url ?? '/', 'http://localhost').searchParams.get('sessionId')
+      if (sessionId === null || !SESSION_ID_RE.test(sessionId)) {
+        return writeJson(res, 400, { ok: false, error: 'invalid-session-id' }, { 'cache-control': 'no-store' })
+      }
+      const presetId = await service.sessionPresetOf(sessionId)
+      writeJson(res, 200, { ok: true, presetId }, { 'cache-control': 'no-store' })
     },
   }
 
@@ -145,5 +165,5 @@ export function makeEvalRoutes(service: EvalConsoleHostService): WebRoute[] {
     },
   }
 
-  return [state, action, events]
+  return [state, sessionPreset, action, events]
 }

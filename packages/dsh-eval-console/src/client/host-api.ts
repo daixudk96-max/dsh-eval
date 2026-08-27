@@ -32,6 +32,8 @@ async function readJson<T>(response: Response): Promise<T> {
 export interface EvalHostTransport {
   /** Fetch the snapshot; pass the logical preset to scope it (default: configured). */
   state(logical?: string): Promise<EvalSnapshot>
+  /** Resolve the preset a stored session runs with (null = none/unreadable). */
+  sessionPreset(sessionId: string): Promise<{ presetId: string | null }>
   action(action: EvalAction): Promise<EvalActionResult>
   subscribe(listener: (event?: EvalEventPayload) => void): () => void
 }
@@ -41,6 +43,13 @@ export class HttpEvalHostTransport implements EvalHostTransport {
   async state(logical?: string): Promise<EvalSnapshot> {
     const query = logical !== undefined ? `?logical=${encodeURIComponent(logical)}` : ''
     return await this.request<EvalSnapshot>(`${EVAL_API_PREFIX}/state${query}`, { cache: 'no-store' })
+  }
+
+  async sessionPreset(sessionId: string): Promise<{ presetId: string | null }> {
+    return await this.request<{ ok: boolean; presetId: string | null }>(
+      `${EVAL_API_PREFIX}/session-preset?sessionId=${encodeURIComponent(sessionId)}`,
+      { cache: 'no-store' },
+    )
   }
 
   async action(action: EvalAction): Promise<EvalActionResult> {
