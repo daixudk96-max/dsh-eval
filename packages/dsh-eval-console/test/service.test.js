@@ -197,7 +197,9 @@ test('sessionPresetOf: last agent-preset/selected event wins (newest first scan)
   try {
     const persistence = {
       async inspect(sessionId) {
-        assert.equal(sessionId, '11111111-2222-4333-8444-555555555555')
+        // The id is passed through verbatim — DSH session ids carry the
+        // 'session-' prefix in the header id itself, and inspect keys on it.
+        assert.equal(sessionId, 'session-11111111-2222-4333-8444-555555555555')
         return {
           meta: { agentPreset: 'older-preset' },
           events: [
@@ -216,7 +218,7 @@ test('sessionPresetOf: last agent-preset/selected event wins (newest first scan)
       agentPresetsRoot: dirs.agentPresetsRoot,
       sessionPersistence: persistence,
     })
-    assert.equal(await service.sessionPresetOf('11111111-2222-4333-8444-555555555555'), 'evaluate')
+    assert.equal(await service.sessionPresetOf('session-11111111-2222-4333-8444-555555555555'), 'evaluate')
   } finally {
     await rm(dirs.root, { recursive: true, force: true })
   }

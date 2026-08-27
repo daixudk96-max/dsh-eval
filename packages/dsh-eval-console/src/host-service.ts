@@ -331,12 +331,12 @@ export class EvalConsoleHostService {
   async sessionPresetOf(sessionId: string): Promise<string | null> {
     const persistence = this.sessionPersistence
     if (persistence === undefined) return null
-    // Session ids may arrive with the filesystem 'session-' directory prefix;
-    // the persistence service keys on the bare uuid.
-    const bareId = sessionId.startsWith('session-') ? sessionId.slice('session-'.length) : sessionId
+    // DSH session ids carry the 'session-' prefix in the session header id
+    // itself (e.g. "session-94a9fca3-..."); inspect keys on that exact id, so
+    // the id is passed through verbatim — never stripped.
     let inspected: { meta?: unknown; events?: unknown[] } | null
     try {
-      inspected = await persistence.inspect(bareId)
+      inspected = await persistence.inspect(sessionId)
     } catch {
       return null
     }
