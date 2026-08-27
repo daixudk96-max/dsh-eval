@@ -331,9 +331,12 @@ export class EvalConsoleHostService {
   async sessionPresetOf(sessionId: string): Promise<string | null> {
     const persistence = this.sessionPersistence
     if (persistence === undefined) return null
+    // Session ids may arrive with the filesystem 'session-' directory prefix;
+    // the persistence service keys on the bare uuid.
+    const bareId = sessionId.startsWith('session-') ? sessionId.slice('session-'.length) : sessionId
     let inspected: { meta?: unknown; events?: unknown[] } | null
     try {
-      inspected = await persistence.inspect(sessionId)
+      inspected = await persistence.inspect(bareId)
     } catch {
       return null
     }

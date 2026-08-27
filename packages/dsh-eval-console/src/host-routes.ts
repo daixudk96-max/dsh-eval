@@ -30,7 +30,7 @@ const HEARTBEAT_MS = 15_000
 const LOGICAL_ID_RE = /^[a-z0-9][a-z0-9-]*$/
 
 /** Session ids feed sessionPersistence.inspect — accept the uuid shape only. */
-const SESSION_ID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+const SESSION_ID_RE = /^(?:session-)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
 
 /** Loopback socket addresses (IPv4, IPv6, IPv4-mapped IPv6). */
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
