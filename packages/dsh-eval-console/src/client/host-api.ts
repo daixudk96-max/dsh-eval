@@ -30,15 +30,17 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export interface EvalHostTransport {
-  state(): Promise<EvalSnapshot>
+  /** Fetch the snapshot; pass the logical preset to scope it (default: configured). */
+  state(logical?: string): Promise<EvalSnapshot>
   action(action: EvalAction): Promise<EvalActionResult>
   subscribe(listener: (event?: EvalEventPayload) => void): () => void
 }
 
 /** HTTP transport over the /eval channel (same-origin desktop GUI). */
 export class HttpEvalHostTransport implements EvalHostTransport {
-  async state(): Promise<EvalSnapshot> {
-    return await this.request<EvalSnapshot>(`${EVAL_API_PREFIX}/state`, { cache: 'no-store' })
+  async state(logical?: string): Promise<EvalSnapshot> {
+    const query = logical !== undefined ? `?logical=${encodeURIComponent(logical)}` : ''
+    return await this.request<EvalSnapshot>(`${EVAL_API_PREFIX}/state${query}`, { cache: 'no-store' })
   }
 
   async action(action: EvalAction): Promise<EvalActionResult> {

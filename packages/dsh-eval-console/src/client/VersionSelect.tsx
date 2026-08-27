@@ -7,6 +7,13 @@
  * HttpEvalHostTransport, so the registrant's inject face stays empty.
  *
  * Behavior (task 08-25-feat-08-25-preset-version-selector, D5):
+ *   - the control is bound to the *current session's preset*: it reads
+ *     session.agentPreset and asks /eval/state?logical=<presetId> for that
+ *     chain only;
+ *   - when the session records no preset, or that preset has no revision
+ *     chain in the registry (current null + history empty), the control
+ *     renders nothing at all — versions are bound to a preset, no chain, no
+ *     control;
  *   - mount + SSE: GET /eval/state once, then /eval/events revision deltas
  *     trigger a re-fetch (the Host never pushes the big snapshot);
  *   - list: the current line (✓ + evaluate-<digest8>) plus previous lines in
@@ -51,7 +58,10 @@ interface VersionRow {
 }
 
 /** The session header's preset-version dropdown. */
-export function VersionSelect({ t }: VersionSelectProps): ReactElement {
+export function VersionSelect({ sessionId, useSessions, t }: VersionSelectProps): ReactElement {
+  // The version chain is bound to the *session's* preset: no preset recorded,
+  // or a preset with no registry chain, means no control at all.
+  const preset = useSessions(state => state.byId[sessionId]?.agentPreset)
   const transport = useMemo(() => new HttpEvalHostTransport(), [])
   const [snapshot, setSnapshot] = useState<EvalSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -63,15 +73,16 @@ export function VersionSelect({ t }: VersionSelectProps): ReactElement {
   const triggerRef = useRef<HTMLButtonElement>(null)
 
   const refresh = useCallback(async () => {
+    if (preset === undefined) return
     try {
-      const next = await transport.state()
+      const next = await transport.state(preset)
       revisionRef.current = next.revision
       setSnapshot(next)
       setError(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
-  }, [transport])
+  }, [transport, preset])
 
   useEffect(() => {
     revisionRef.current = -1
@@ -88,7 +99,11 @@ export function VersionSelect({ t }: VersionSelectProps): ReactElement {
   // The header action strip stays compact: with nothing to offer yet, render
   // nothing at all — an empty trigger for a data source that never arrives is
   // worse than no control. (The board tab still shows load errors in full.)
+  if (preset === undefined) return <></>
   if (error !== null) return <></>
+  // Versions are bound to a preset: a preset without a registry chain
+  // (no current pointer, no history) gets no version control.
+  if (snapshot === null || (snapshot.current === null && snapshot.history.length === 0)) return <></>
 
   const rows: VersionRow[] = []
   if (snapshot !== null) {

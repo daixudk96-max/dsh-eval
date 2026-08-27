@@ -191,3 +191,65 @@ test('switch-revision: missing revision content throws', async () => {
     await rm(dirs.root, { recursive: true, force: true })
   }
 })
+
+test('snapshot: per-logical query — preset without a chain yields current null + empty history', async () => {
+  const dirs = await tmpDirs()
+  try {
+    const seen = []
+    const registry = {
+      async resolveCurrent(logicalId) {
+        seen.push(`resolve:${logicalId}`)
+        return null
+      },
+      async history(logicalId) {
+        seen.push(`history:${logicalId}`)
+        return []
+      },
+    }
+    const service = new EvalConsoleHostService({
+      registry,
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: LOGICAL,
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+    })
+    const snap = await service.snapshot('deep-mindmap')
+    // The requested logical is what the registry was asked about...
+    assert.deepEqual(seen.sort(), ['history:deep-mindmap', 'resolve:deep-mindmap'])
+    // ...and the snapshot reports that logical with no version data.
+    assert.equal(snap.logicalId, 'deep-mindmap')
+    assert.equal(snap.current, null)
+    assert.deepEqual(snap.history, [])
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true })
+  }
+})
+
+test('snapshot: defaults to the configured logical when the id is omitted', async () => {
+  const dirs = await tmpDirs()
+  try {
+    const seen = []
+    const registry = {
+      async resolveCurrent(logicalId) {
+        seen.push(`resolve:${logicalId}`)
+        return null
+      },
+      async history(logicalId) {
+        seen.push(`history:${logicalId}`)
+        return []
+      },
+    }
+    const service = new EvalConsoleHostService({
+      registry,
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: LOGICAL,
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+    })
+    const snap = await service.snapshot()
+    assert.equal(snap.logicalId, LOGICAL)
+    assert.deepEqual(seen.sort(), ['history:evaluate', 'resolve:evaluate'])
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true })
+  }
+})

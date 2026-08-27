@@ -21,6 +21,14 @@ import { parseActionEnvelope, EVAL_API_PREFIX } from './domain/protocol.ts'
 const ACTION_LIMIT = 64 * 1024
 const HEARTBEAT_MS = 15_000
 
+/**
+ * Logical preset ids fed back into registry path lookups — keep them safe:
+ * registry._safeFileId escapes %,: but a `..` or a path separator in the id
+ * would still escape the logical/ or pointers/ directory. Preset ids are
+ * constrained to the same shape DSH allows (`[a-z0-9][a-z0-9-]*`).
+ */
+const LOGICAL_ID_RE = /^[a-z0-9][a-z0-9-]*$/
+
 /** Loopback socket addresses (IPv4, IPv6, IPv4-mapped IPv6). */
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
@@ -60,7 +68,13 @@ export function makeEvalRoutes(service: EvalConsoleHostService): WebRoute[] {
         return writeJson(res, 405, { ok: false, error: 'method-not-allowed' }, { 'cache-control': 'no-store' })
       }
       if (!guard(req, res)) return
-      writeJson(res, 200, await service.snapshot(), { 'cache-control': 'no-store' })
+      // Optional ?logical=<presetId>: the UI asks for the current session's
+      // preset; without the parameter the configured logicalId is served.
+      const logical = new URL(req.url ?? '/', 'http://localhost').searchParams.get('logical')
+      if (logical !== null && !LOGICAL_ID_RE.test(logical)) {
+        return writeJson(res, 400, { ok: false, error: 'invalid-logical' }, { 'cache-control': 'no-store' })
+      }
+      writeJson(res, 200, await service.snapshot(logical ?? undefined), { 'cache-control': 'no-store' })
     },
   }
 

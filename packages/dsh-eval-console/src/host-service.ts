@@ -112,9 +112,12 @@ export class EvalConsoleHostService {
     }
   }
 
-  /** Read the pointer file for updatedAt (tolerant of absence). */
-  private async readPointerUpdatedAt(): Promise<string | null> {
-    const file = `${this.registryRoot}/${POINTER_DIR}/${this.logicalId}.current.json`
+  /**
+   * Read the pointer file for updatedAt (tolerant of absence).
+   * Parameterised so a snapshot can be assembled for any logical preset.
+   */
+  private async readPointerUpdatedAt(logicalId: string = this.logicalId): Promise<string | null> {
+    const file = `${this.registryRoot}/${POINTER_DIR}/${logicalId}.current.json`
     try {
       const { readFile } = await import('node:fs/promises')
       const parsed: unknown = JSON.parse(await readFile(file, 'utf8'))
@@ -125,13 +128,20 @@ export class EvalConsoleHostService {
     }
   }
 
-  /** Assemble a fresh snapshot from live registry + audit reads. */
-  async snapshot(): Promise<EvalSnapshot> {
+  /**
+   * Assemble a fresh snapshot from live registry + audit reads.
+   *
+   * The logical preset defaults to the configured one (config.logicalId) but
+   * can be overridden per request — the UI asks for the *current session's*
+   * preset and renders the version control only when that preset actually has
+   * a revision chain (current or history non-empty).
+   */
+  async snapshot(logicalId: string = this.logicalId): Promise<EvalSnapshot> {
     const [current, history, audit, updatedAt] = await Promise.all([
-      this.registry.resolveCurrent(this.logicalId),
-      this.registry.history(this.logicalId),
+      this.registry.resolveCurrent(logicalId),
+      this.registry.history(logicalId),
       readAuditEntries(this.auditFile),
-      this.readPointerUpdatedAt(),
+      this.readPointerUpdatedAt(logicalId),
     ])
     const currentFacts: RegistryCurrentFacts | null =
       current === null
@@ -146,7 +156,7 @@ export class EvalConsoleHostService {
             ...(updatedAt === null ? {} : { updatedAt }),
           }
     const snapshot = buildSnapshot({
-      logicalId: this.logicalId,
+      logicalId,
       revision: audit.length,
       current: currentFacts,
       history,
@@ -163,9 +173,16 @@ export class EvalConsoleHostService {
     await this.snapshot()
   }
 
-  /** Lightweight SSE frame — never the big snapshot. */
+  /**
+   * Lightweight SSE frame — never the big snapshot. Frames always describe
+   * the configured logical preset (the default chain), never an arbitrary
+   * per-request snapshot another client asked for.
+   */
   async eventPayload(): Promise<EvalEventPayload> {
-    const snapshot = this.lastSnapshot ?? (await this.snapshot())
+    const snapshot =
+      this.lastSnapshot !== undefined && this.lastSnapshot.logicalId === this.logicalId
+        ? this.lastSnapshot
+        : await this.snapshot()
     return {
       revision: snapshot.revision,
       logicalId: snapshot.logicalId,
