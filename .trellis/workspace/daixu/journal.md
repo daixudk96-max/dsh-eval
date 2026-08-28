@@ -165,3 +165,10 @@
 - 诚实标注: baseline 分数 0 = RPC 挂载失败映射(非评测分数); 两轮真实评测分数相同证明补 config 不改变评测行为。
 - 提交 0a6e4a6(11 文件); 回归 0 失败; 报告 research/evolution-mount-fix-report.md。
 - 教训: 评测子进程(wrapper 合并 overlay)不受 preset config 缺失影响——挂载性缺陷只能靠 RPC/GUI 验证, 评测分数测不出。
+
+## 2026-08-28 — 作用域化进化控制台(任务 feat-08-28-scoped-evolution-console,已归档)
+- 用户反馈:两个评测入口混淆(版本下拉≠回滚)、进化控制台固定 evaluate 链、回滚门禁语义不清。
+- 交付:进化标签绑定当前会话 preset;no-preset/no-chain 明确空状态;Host audit 按 logical scoping(scopeAuditEntries: 显式 logicalId + revisionId/targetRevisionId 前缀桥接旧 runId + 显式其他 logical 排除 + 保序;snapshot.revision 保持 auditAll.length 兼容全局 SSE);写动作从 revisionId 推导 logical(logicalIdFromRevisionId),绝不串写;LatestRequestController 防 session/preset 竞态。
+- 流程:PRD+Design+Implement(subagent)→ 用户批准 → design-review passed → implement(2 轮,修 F1-F5)→ code review passed → trellis-check PASS → AC8 用户重启后 curl 实测(跨 logical detail/switch 正确落 system-evolver 目录)。
+- 数字:console 79 用例 0 失败;typecheck 0;build client.js 70.64kB;evolution-controller+preset-registry 回归 0。提交 82b90c8(22 文件)。
+- 教训:①独立 review 抓到写侧未作用域化(F1 会把 system-evolver 内容写进 evaluate 目录)——读侧 scoped 不等于写侧 scoped;②竞态修复用纯 LatestRequestController 可无 DOM 测试;③host-routes.baseLogicalId 与 host-service 逻辑重复 → 抽 domain/revision-id.ts 共享。
