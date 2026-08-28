@@ -51,6 +51,14 @@ export interface SyncRevisionOptions {
   files: Record<string, string>
   /** Owner package recorded in the marker. Default 'dsh-eval-console'. */
   ownerPackage?: string
+  /**
+   * Optional change note for this revision (e.g. the mutation summaries from
+   * the revision manifest). When given, the synced copy of preset.yml is
+   * decorated: `name` gains a ` · <digest8>` suffix and `description` gains a
+   * `。本版变更: <note>` suffix, so the preset picker shows which version this
+   * is and what changed. The registry content is never modified.
+   */
+  changeNote?: string
 }
 
 export interface SyncRevisionResult {
@@ -67,6 +75,23 @@ export interface SyncRevisionResult {
 }
 
 const DIGEST_RE = /^[0-9a-f]{64}$/
+
+/**
+ * Decorate a preset.yml copy for a versioned directory: append ` · <digest8>`
+ * to `name` and `。本版变更: <note>` to `description`. Lines are matched with
+ * `^name:` / `^description:` anchors; when either line is absent the text is
+ * returned unchanged.
+ */
+export function decoratePresetYml(text: string, digest: string, changeNote: string): string {
+  const tag = digest.slice(0, 8)
+  let out = text.replace(/^name:\s*(.+)$/m, (_m, name: string) => `name: ${name.trim()} · ${tag}`)
+  out = out.replace(/^description:\s*(.+)$/m, (_m, desc: string) => {
+    const trimmed = desc.trim()
+    const sep = /[。.!?！？]$/.test(trimmed) ? '' : '。'
+    return `description: ${trimmed}${sep}本版变更: ${changeNote}`
+  })
+  return out
+}
 
 /** Reject any path that could escape the target directory. */
 function assertSafeRelativePath(key: string): void {
@@ -133,6 +158,13 @@ export async function syncRevision(options: SyncRevisionOptions): Promise<SyncRe
     throw new Error(`unsafe logical id: ${logicalId}`)
   }
 
+  // Decorate the synced copy of preset.yml (never the registry content) with
+  // the version tag and the change note when one is provided.
+  const outFiles: Record<string, string> = { ...files }
+  if (options.changeNote !== undefined && outFiles['preset.yml'] !== undefined) {
+    outFiles['preset.yml'] = decoratePresetYml(outFiles['preset.yml'], digest, options.changeNote)
+  }
+
   const targetId = `${logicalId}-${digest.slice(0, 8)}`
   const dir = path.join(agentPresetsRoot, targetId)
 
@@ -152,9 +184,9 @@ export async function syncRevision(options: SyncRevisionOptions): Promise<SyncRe
   // reported as written.
   const written: string[] = []
   const skipped: string[] = []
-  for (const rel of Object.keys(files)) {
+  for (const rel of Object.keys(outFiles)) {
     assertSafeRelativePath(rel)
-    if (existed && (await fileEquals(path.join(dir, rel), files[rel]!))) skipped.push(rel)
+    if (existed && (await fileEquals(path.join(dir, rel), outFiles[rel]!))) skipped.push(rel)
     else written.push(rel)
   }
 
@@ -172,7 +204,7 @@ export async function syncRevision(options: SyncRevisionOptions): Promise<SyncRe
   let movedAside = false
   try {
     await mkdir(staging, { recursive: true })
-    for (const [rel, text] of Object.entries(files)) {
+    for (const [rel, text] of Object.entries(outFiles)) {
       const abs = path.join(staging, rel)
       await mkdir(path.dirname(abs), { recursive: true })
       await writeFile(abs, text, 'utf8')

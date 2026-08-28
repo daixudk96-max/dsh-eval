@@ -56,6 +56,9 @@ function mockRegistry() {
       assert.equal(digest, PREV_DIGEST)
       return { files: FILES, text: Object.values(FILES).join('\n') }
     },
+    async revisionManifest() {
+      return null
+    },
   }
 }
 
@@ -377,6 +380,60 @@ test('snapshot: defaults to the configured logical when the id is omitted', asyn
     const snap = await service.snapshot()
     assert.equal(snap.logicalId, LOGICAL)
     assert.deepEqual(seen.sort(), ['history:evaluate', 'resolve:evaluate'])
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true })
+  }
+})
+
+test('switch-revision: manifest mutations become the change note on the synced preset.yml', async () => {
+  const dirs = await tmpDirs()
+  try {
+    const registry = {
+      async resolveCurrent() {
+        return { logicalId: LOGICAL, revisionId: CURRENT_REV, digest: CURRENT_DIGEST, gateRunId: null, approvalId: null, resolved: true }
+      },
+      async history() {
+        return [
+          { revisionId: CURRENT_REV, digest: CURRENT_DIGEST, status: 'active' },
+          { revisionId: PREV_REV, digest: PREV_DIGEST, status: 'previous' },
+        ]
+      },
+      async revisionContent() {
+        return {
+          files: { 'preset.yml': 'name: 评测\ndescription: 评测 DSH 会话与基准。\norder: 2\n' },
+          text: 'name: 评测\ndescription: 评测 DSH 会话与基准。\norder: 2\n',
+        }
+      },
+      async revisionManifest() {
+        return {
+          mutations: [
+            { summary: 'tool-fs-search 补 config.sampleOverCapGlobResults: false' },
+            { summary: 'tool-todo 补 config.allowParallelInProgress: true' },
+            { file: 'agent.cordis.yml' },
+          ],
+        }
+      },
+    }
+    const service = new EvalConsoleHostService({
+      registry,
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: LOGICAL,
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+    })
+    const result = await service.apply('req-note', { kind: 'switch-revision', revisionId: PREV_REV })
+    assert.equal(result.action, 'switch-revision')
+    const written = await readFile(path.join(result.targetDir, 'preset.yml'), 'utf8')
+    assert.match(written, /^name: 评测 · ab63a9b7$/m)
+    assert.match(
+      written,
+      /本版变更: tool-fs-search 补 config\.sampleOverCapGlobResults: false; tool-todo 补 config\.allowParallelInProgress: true/,
+    )
+    // The audit line records the switch with the digest.
+    const audit = await readAuditEntries(dirs.auditFile)
+    assert.equal(audit.length, 1)
+    assert.equal(audit[0].event, 'switch-to-revision')
+    assert.equal(audit[0].digest, PREV_DIGEST)
   } finally {
     await rm(dirs.root, { recursive: true, force: true })
   }

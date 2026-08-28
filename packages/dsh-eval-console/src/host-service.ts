@@ -33,6 +33,7 @@ export interface RegistryLike {
   resolveCurrent(logicalId: string): Promise<RegistryCurrentFacts | null>
   history(logicalId: string): Promise<EvalHistoryEntry[]>
   revisionContent(digest: string): Promise<{ files: Record<string, string>; text: string } | null>
+  revisionManifest(digest: string): Promise<{ mutations?: Array<{ summary?: string }> } | null>
   rollbackContent(
     logicalId: string,
     targetRevisionId: string,
@@ -290,11 +291,20 @@ export class EvalConsoleHostService {
         if (content === null) {
           throw new Error(`revision content unavailable: ${digest.slice(0, 8)}`)
         }
+        // Change note = the revision manifest's mutation summaries, so the
+        // synced preset.yml can say what this version changed.
+        const manifest = await this.registry.revisionManifest(digest)
+        const changeNote =
+          manifest?.mutations
+            ?.map((m: { summary?: unknown }) => (typeof m.summary === 'string' ? m.summary : ''))
+            .filter((s: string) => s !== '')
+            .join('; ') ?? ''
         const result = await syncRevision({
           agentPresetsRoot: this.agentPresetsRoot,
           logicalId: this.logicalId,
           digest,
           files: content.files,
+          ...(changeNote === '' ? {} : { changeNote }),
         })
         // Best-effort audit: a ledger failure is logged by appendAuditLine and
         // never blocks the sync result (the sync itself already succeeded).

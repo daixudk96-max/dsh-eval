@@ -410,6 +410,17 @@ class Registry {
     return { files, text };
   }
 
+  /**
+   * Read an immutable revision's manifest (mutations etc.), for change notes.
+   * @param {string} digest - content-addressed revision digest.
+   * @returns {Promise<object | null>} the manifest (incl. mutations) or null.
+   */
+  async revisionManifest(digest) {
+    const dir = this._revisionDir(digest);
+    if (!fs.existsSync(dir)) return null;
+    return readJson(path.join(dir, 'manifest.json'), null);
+  }
+
   // ---- helpers ------------------------------------------------------------
 
   async _copyDir(src, dest) {

@@ -191,3 +191,48 @@ test('rejects an invalid digest and an unsafe logical id', async () => {
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test('decoratePresetYml appends version tag to name and change note to description', async () => {
+  const { decoratePresetYml } = await import('../src/version-sync.ts')
+  const yml = 'name: 评测\ndescription: 评测 DSH 会话与基准。\norder: 2\n'
+  const out = decoratePresetYml(yml, DIGEST, 'tool-fs-search 补 config; tool-todo 补 config')
+  assert.match(out, /^name: 评测 · 94a7c40b$/m)
+  assert.match(out, /^description: 评测 DSH 会话与基准。本版变更: tool-fs-search 补 config; tool-todo 补 config$/m)
+  assert.match(out, /^order: 2$/m)
+  // No name/description lines → returned unchanged.
+  assert.equal(decoratePresetYml('model: x\n', DIGEST, 'note'), 'model: x\n')
+})
+
+test('syncRevision with changeNote writes a decorated preset.yml copy', async () => {
+  const root = await tmpRoot()
+  try {
+    const files = {
+      'preset.yml': 'name: 评测\ndescription: 评测 DSH 会话与基准。\norder: 2\n',
+      'agent.cordis.yml': 'rows\n',
+    }
+    const result = await syncRevision({
+      agentPresetsRoot: root,
+      logicalId: 'evaluate',
+      digest: DIGEST,
+      files,
+      changeNote: 'tool-fs-search 补 config.sampleOverCapGlobResults: false',
+    })
+    const written = await readFile(path.join(result.dir, 'preset.yml'), 'utf8')
+    assert.match(written, /^name: 评测 · 94a7c40b$/m)
+    assert.match(written, /本版变更: tool-fs-search 补 config\.sampleOverCapGlobResults: false/)
+    // The input files object is never mutated.
+    assert.equal(files['preset.yml'], 'name: 评测\ndescription: 评测 DSH 会话与基准。\norder: 2\n')
+    // Idempotent re-sync with the same changeNote skips everything.
+    const again = await syncRevision({
+      agentPresetsRoot: root,
+      logicalId: 'evaluate',
+      digest: DIGEST,
+      files,
+      changeNote: 'tool-fs-search 补 config.sampleOverCapGlobResults: false',
+    })
+    assert.deepEqual(again.written, [])
+    assert.deepEqual(again.skipped.sort(), ['agent.cordis.yml', 'preset.yml'])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
