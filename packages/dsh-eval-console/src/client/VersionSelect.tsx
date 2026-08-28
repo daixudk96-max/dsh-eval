@@ -33,6 +33,8 @@ import { useDismissOnOutsidePointer } from '@deepseek-ai/dsh-client-ui-primitive
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { EvalSnapshot } from '../domain/protocol.ts'
 import { HttpEvalHostTransport } from './host-api.ts'
+import { useSessionPreset } from './session-preset.ts'
+import { LatestRequestController } from './latest-request.ts'
 import { fmtTime } from './format.ts'
 
 /** Registration-side business face: none — the control reads the Host itself. */
@@ -63,9 +65,9 @@ export function VersionSelect({ sessionId, t }: VersionSelectProps): ReactElemen
   // or a preset with no registry chain, means no control at all.
   // The session's preset is resolved Host-side via sessionPersistence.inspect
   // (the session-port store exposes no agentPreset field), through
-  // GET /eval/session-preset?sessionId=<uuid>.
+  // GET /eval/session-preset?sessionId=<uuid> — shared hook, see session-preset.ts.
   const transport = useMemo(() => new HttpEvalHostTransport(), [])
-  const [preset, setPreset] = useState<string | null | undefined>(undefined)
+  const { preset } = useSessionPreset(transport, sessionId)
   const [snapshot, setSnapshot] = useState<EvalSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -74,40 +76,45 @@ export function VersionSelect({ sessionId, t }: VersionSelectProps): ReactElemen
   const revisionRef = useRef(-1)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    transport
-      .sessionPreset(sessionId)
-      .then((result) => {
-        if (!cancelled) setPreset(result.presetId)
-      })
-      .catch(() => {
-        // Unreadable session (or Host without sessionPersistence): no control.
-        if (!cancelled) setPreset(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [transport, sessionId])
+  // Latest-request guard: an old preset's state() resolving late must never
+  // overwrite the current preset's snapshot, error or notice.
+  const scopeController = useMemo(() => new LatestRequestController(), [])
 
   const refresh = useCallback(async () => {
     if (preset === undefined || preset === null) return
+    const scope = scopeController.begin()
     try {
       const next = await transport.state(preset)
+      if (scopeController.isStale(scope)) return
       revisionRef.current = next.revision
       setSnapshot(next)
       setError(null)
     } catch (cause) {
+      if (scopeController.isStale(scope)) return
       setError(cause instanceof Error ? cause.message : String(cause))
     }
-  }, [transport, preset])
+  }, [transport, preset, scopeController])
 
   useEffect(() => {
+    // A preset/session switch clears the previous preset's state entirely.
     revisionRef.current = -1
+    setSnapshot(null)
+    setError(null)
+    setBusyId(null)
+    setNotice(null)
+    setOpen(false)
+    scopeController.begin()
     void refresh()
+    return () => {
+      scopeController.invalidate()
+    }
+  }, [transport, refresh, scopeController])
+
+  // SSE once per transport (stable): frames trigger a re-fetch of the current
+  // scope; the revision-delta check keeps a frame equal to our counter from
+  // causing a redundant fetch.
+  useEffect(() => {
     return transport.subscribe((event) => {
-      // SSE frames are revision deltas; skip when this control is already current.
       if (event !== undefined && event.revision === revisionRef.current) return
       void refresh()
     })

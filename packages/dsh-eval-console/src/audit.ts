@@ -64,6 +64,61 @@ export function deltaAuditEntries(entries: readonly AuditEntry[], fromIndex: num
   return fromIndex >= entries.length ? [] : entries.slice(fromIndex)
 }
 
+/** A revision-id (or rollback target) prefix for one logical preset. */
+function revisionPrefix(logicalId: string): string {
+  return `${logicalId}-`
+}
+
+/**
+ * Scope a full evolution-audit ledger to one logical preset, so the board
+ * (buildRows) and timeline never show another preset's candidates.
+ *
+ * Rules (two passes, order preserved, never sorted):
+ *   1. ownership collection:
+ *      - explicit `entry.logicalId === logicalId` → owned;
+ *      - `entry.revisionId` / `entry.targetRevisionId` starts with
+ *        `<logicalId>-` → owned (by prefix, kept by index), and its `runId` is
+ *        remembered (old records carry no logicalId; the sealed/promoted
+ *        revision prefix bridges the run back to this preset);
+ *   2. keep every entry that is explicitly owned (logicalId or prefix), plus
+ *      every entry of an owned run. A record with an explicit `logicalId`
+ *      belonging to *another* preset is excluded even when its runId collides
+ *      with an owned run (the runId is global, but ownership is per-record).
+ *      Any entry that cannot be attributed is dropped — better to
+ *      under-display than to leak.
+ *
+ * Contract: the output is a subsequence of the input (same order, no
+ * re-sorting), so timeline ids and revision-fact keys stay stable.
+ */
+export function scopeAuditEntries(audit: readonly AuditEntry[], logicalId: string): AuditEntry[] {
+  const prefix = revisionPrefix(logicalId)
+  const ownedRuns = new Set<string>()
+  const ownedByPrefix = new Set<number>()
+  for (let i = 0; i < audit.length; i += 1) {
+    const entry = audit[i]
+    if (entry === undefined) continue
+    if (entry.logicalId === logicalId) {
+      if (typeof entry.runId === 'string') ownedRuns.add(entry.runId)
+      continue
+    }
+    if (
+      (typeof entry.revisionId === 'string' && entry.revisionId.startsWith(prefix)) ||
+      (typeof entry.targetRevisionId === 'string' && entry.targetRevisionId.startsWith(prefix))
+    ) {
+      ownedByPrefix.add(i)
+      if (typeof entry.runId === 'string') ownedRuns.add(entry.runId)
+    }
+  }
+  return audit.filter((entry, index) => {
+    if (entry.logicalId === logicalId) return true
+    if (ownedByPrefix.has(index)) return true
+    // A record explicitly marked for another logical never belongs here, even
+    // when its runId happens to match an owned run.
+    if (entry.logicalId !== undefined && entry.logicalId !== logicalId) return false
+    return typeof entry.runId === 'string' && ownedRuns.has(entry.runId)
+  })
+}
+
 /**
  * Append one ledger line (JSON + '\n') with a single atomic appendFile write
  * (safe against concurrent appenders, same mode as evolution-controller's

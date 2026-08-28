@@ -25,8 +25,9 @@
 import type { AuditEntry, RegistryCurrentFacts } from './domain/adapter.ts'
 import { buildSnapshot, shortDigest } from './domain/adapter.ts'
 import type { EvalAction, EvalActionResult, EvalEventPayload, EvalHistoryEntry, EvalSnapshot, EvalTimelineEvent } from './domain/protocol.ts'
-import { readAuditEntries, appendAuditLine } from './audit.ts'
+import { readAuditEntries, appendAuditLine, scopeAuditEntries } from './audit.ts'
 import { syncRevision } from './version-sync.ts'
+import { logicalIdFromRevisionId } from './domain/revision-id.ts'
 
 /** Structural subset of packages/preset-registry/lib/registry.js. */
 export interface RegistryLike {
@@ -156,7 +157,7 @@ export class EvalConsoleHostService {
    * a revision chain (current or history non-empty).
    */
   async snapshot(logicalId: string = this.logicalId): Promise<EvalSnapshot> {
-    const [current, history, audit, updatedAt] = await Promise.all([
+    const [current, history, auditAll, updatedAt] = await Promise.all([
       this.registry.resolveCurrent(logicalId),
       this.registry.history(logicalId),
       readAuditEntries(this.auditFile),
@@ -174,15 +175,19 @@ export class EvalConsoleHostService {
             resolved: current.resolved,
             ...(updatedAt === null ? {} : { updatedAt }),
           }
+    // Scope the full ledger to this logical preset so buildRows/timeline never
+    // surface another preset's candidates; the revision counter stays global
+    // (auditAll.length) so /eval/events revision-delta semantics never drift.
+    const scopedAudit = scopeAuditEntries(auditAll, logicalId)
     const snapshot = buildSnapshot({
       logicalId,
-      revision: audit.length,
+      revision: auditAll.length,
       current: currentFacts,
       history,
-      audit,
+      audit: scopedAudit,
       tailLimit: this.tailLimit,
     })
-    this.revision = audit.length
+    this.revision = auditAll.length
     this.lastSnapshot = snapshot
     return snapshot
   }
@@ -228,18 +233,24 @@ export class EvalConsoleHostService {
     }
   }
 
-  /** Resolve a revisionId -> digest from current/history/audit facts. */
-  private async digestForRevision(revisionId: string): Promise<string | null> {
+  /**
+   * Resolve a revisionId -> digest from the *derived* logical's current /
+   * history / scoped audit facts. A revision id belongs to exactly one
+   * logical (`<logicalId>-<digest8>`), so deriving the logical from the id
+   * keeps every write action in its own preset's chain — never another one's.
+   */
+  private async digestForRevision(logicalId: string, revisionId: string): Promise<string | null> {
     const [current, history, audit] = await Promise.all([
-      this.registry.resolveCurrent(this.logicalId),
-      this.registry.history(this.logicalId),
+      this.registry.resolveCurrent(logicalId),
+      this.registry.history(logicalId),
       readAuditEntries(this.auditFile),
     ])
     if (current !== null && current.revisionId === revisionId) return current.digest
     for (const entry of history) {
       if (entry.revisionId === revisionId) return entry.digest
     }
-    for (const entry of audit) {
+    // Only that logical's scoped audit is authoritative for revision digests.
+    for (const entry of scopeAuditEntries(audit, logicalId)) {
       if (entry.revisionId === revisionId && typeof entry.digest === 'string') return entry.digest
     }
     return null
@@ -248,11 +259,19 @@ export class EvalConsoleHostService {
   /**
    * Apply a validated action envelope (parseActionEnvelope ran upstream).
    * Read-only except rollback, which is confirm-gated and logicalId-checked.
+   *
+   * Every content action derives its logical preset from the revision id
+   * (`<logicalId>-<digest8>`); the config.logicalId is only the default chain
+   * for snapshot(undefined). A revision id that does not match the derived
+   * logical's chain is rejected — a write action can never land in another
+   * preset's install directory.
    */
   async apply(requestId: string, action: EvalAction): Promise<EvalActionResult> {
     switch (action.kind) {
       case 'detail': {
-        const digest = await this.digestForRevision(action.revisionId)
+        const logical = logicalIdFromRevisionId(action.revisionId)
+        if (logical === null) throw new Error(`unknown revision: ${action.revisionId}`)
+        const digest = await this.digestForRevision(logical, action.revisionId)
         if (digest === null) {
           throw new Error(`unknown revision: ${action.revisionId}`)
         }
@@ -261,8 +280,15 @@ export class EvalConsoleHostService {
         return { ok: true, action: 'detail', revisionId: action.revisionId, digest, files }
       }
       case 'rollback': {
-        if (action.logicalId !== this.logicalId) {
-          throw new Error(`rollback logicalId mismatch: ${action.logicalId} != ${this.logicalId}`)
+        // The revision id's own logical (derived) must match the action's
+        // explicit logicalId — a mismatched pair is refused outright, and the
+        // config logical never substitutes for either.
+        const derived = logicalIdFromRevisionId(action.revisionId)
+        if (derived === null) {
+          throw new Error(`rollback logicalId mismatch: ${action.logicalId} (revision ${action.revisionId})`)
+        }
+        if (derived !== action.logicalId) {
+          throw new Error(`rollback logicalId mismatch: ${action.logicalId} != ${derived}`)
         }
         const result = await this.registry.rollbackContent(action.logicalId, action.revisionId, {
           detectConflicts: true,
@@ -285,7 +311,9 @@ export class EvalConsoleHostService {
         return { ok: true, action: 'refresh', snapshot: await this.snapshot() }
       }
       case 'switch-revision': {
-        const digest = await this.digestForRevision(action.revisionId)
+        const logical = logicalIdFromRevisionId(action.revisionId)
+        if (logical === null) throw new Error(`unknown revision: ${action.revisionId}`)
+        const digest = await this.digestForRevision(logical, action.revisionId)
         if (digest === null) throw new Error(`unknown revision: ${action.revisionId}`)
         const content = await this.registry.revisionContent(digest)
         if (content === null) {
@@ -299,9 +327,11 @@ export class EvalConsoleHostService {
             ?.map((m: { summary?: unknown }) => (typeof m.summary === 'string' ? m.summary : ''))
             .filter((s: string) => s !== '')
             .join('; ') ?? ''
+        // The sync target directory and the audit record must use the
+        // revision's own logical — never this.logicalId.
         const result = await syncRevision({
           agentPresetsRoot: this.agentPresetsRoot,
-          logicalId: this.logicalId,
+          logicalId: logical,
           digest,
           files: content.files,
           ...(changeNote === '' ? {} : { changeNote }),
@@ -312,7 +342,7 @@ export class EvalConsoleHostService {
           op: 'audit',
           ts: new Date().toISOString(),
           event: 'switch-to-revision',
-          logicalId: this.logicalId,
+          logicalId: logical,
           revisionId: action.revisionId,
           digest,
           targetDir: result.dir,
@@ -370,15 +400,15 @@ export class EvalConsoleHostService {
     return null
   }
 
-  /** Current timeline (for tests/debugging); tail capped. */
-  async timeline(): Promise<EvalTimelineEvent[]> {
+  /** Current timeline (for tests/debugging); scoped, tail capped. */
+  async timeline(logicalId: string = this.logicalId): Promise<EvalTimelineEvent[]> {
     const audit = await readAuditEntries(this.auditFile)
     const snapshot = buildSnapshot({
-      logicalId: this.logicalId,
+      logicalId,
       revision: audit.length,
       current: null,
       history: [],
-      audit,
+      audit: scopeAuditEntries(audit, logicalId),
       tailLimit: this.tailLimit,
     })
     return snapshot.timeline

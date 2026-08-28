@@ -18,7 +18,8 @@ import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/clie
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { EvalHostTransport } from './host-api.ts'
 import { HttpEvalHostTransport } from './host-api.ts'
-import { detectLang, tr, type EvalConsoleKey } from './locales.ts'
+import { useSessionPreset, evalViewPhaseOf } from './session-preset.ts'
+import { LatestRequestController } from './latest-request.ts'
 import type { EvalSnapshot, EvalStatusRow } from '../domain/protocol.ts'
 import { EvalCard, fmtTime } from './EvalCard.tsx'
 import { EvalDetail } from './EvalDetail.tsx'
@@ -34,8 +35,8 @@ export interface EvalConsoleViewProps
     InjectFace<EvalConsoleInjected>,
     PropsLocale<'eval-console'> {}
 
-/** Polling + SSE driver for one snapshot source. */
-function useEvalState(transport: EvalHostTransport): {
+/** Polling + SSE driver for one snapshot source (scoped to `logical`). */
+function useEvalState(transport: EvalHostTransport, logical: string | null): {
   snapshot: EvalSnapshot | null
   error: string | null
   loading: boolean
@@ -45,40 +46,72 @@ function useEvalState(transport: EvalHostTransport): {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const revisionRef = useRef(-1)
+  // Latest-request guard: an old logical's state() resolving late must never
+  // overwrite the current scope's snapshot (preset/session switches).
+  const scopeController = useMemo(() => new LatestRequestController(), [])
 
   const refresh = useCallback(async () => {
+    if (logical === null) return
+    const scope = scopeController.begin()
     try {
-      const next = await transport.state()
+      const next = await transport.state(logical)
+      if (scopeController.isStale(scope)) return
       revisionRef.current = next.revision
       setSnapshot(next)
       setError(null)
     } catch (cause) {
+      if (scopeController.isStale(scope)) return
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
-      setLoading(false)
+      if (!scopeController.isStale(scope)) setLoading(false)
     }
-  }, [transport])
+  }, [transport, logical, scopeController])
 
   useEffect(() => {
+    // A preset/session switch must never leave the previous preset's board.
+    setSnapshot(null)
+    setError(null)
+    setLoading(true)
     revisionRef.current = -1
+    scopeController.begin()
     void refresh()
+    return () => {
+      scopeController.invalidate()
+    }
+  }, [transport, refresh, logical, scopeController])
+
+  // SSE subscribes once for the lifetime of the transport (stable); the
+  // listener re-checks the current revision only — a stale frame for another
+  // scope still triggers a re-fetch of the current scope.
+  const subscribeEffect = useCallback(() => {
     return transport.subscribe((event) => {
       // SSE frames are revision deltas; skip when the board is already current.
+      // Re-fetch on the *current scope* only (the frame's logicalId is the
+      // configured default chain, never the scope we asked for).
       if (event !== undefined && event.revision === revisionRef.current) return
       void refresh()
     })
   }, [transport, refresh])
 
+  useEffect(() => {
+    return subscribeEffect()
+  }, [subscribeEffect])
+
   return { snapshot, error, loading, refresh }
 }
 
 /** The evolution console tab. */
-export function EvalConsoleView(_props: EvalConsoleViewProps): ReactElement {
+export function EvalConsoleView({ sessionId, t }: EvalConsoleViewProps): ReactElement {
   const transport = useMemo(() => new HttpEvalHostTransport(), [])
-  const { snapshot, error, loading, refresh } = useEvalState(transport)
+  const { preset } = useSessionPreset(transport, sessionId)
+  const { snapshot, error, refresh } = useEvalState(transport, preset ?? null)
   const [selected, setSelected] = useState<string | null>(null)
-  const lang = useMemo(() => detectLang(), [])
-  const t = useCallback((key: EvalConsoleKey) => tr(lang, key), [lang])
+
+  // A preset/session switch must dismiss any detail modal from the previous
+  // scope — a stale selectedRow must never render against a new snapshot.
+  useEffect(() => {
+    setSelected(null)
+  }, [preset])
 
   const selectedRow: EvalStatusRow | null = useMemo(() => {
     if (selected === null || snapshot === null) return null
@@ -89,7 +122,28 @@ export function EvalConsoleView(_props: EvalConsoleViewProps): ReactElement {
     return null
   }, [selected, snapshot])
 
-  if (error !== null) {
+  const phase = evalViewPhaseOf(preset, snapshot, error)
+
+  if (phase === 'loading') {
+    return (
+      <div className="evc-board" data-dsh-plugin="eval-console">
+        <span className="evc-empty">{preset === undefined ? t('view.loadingPreset') : t('view.loading')}</span>
+      </div>
+    )
+  }
+
+  if (phase === 'no-preset') {
+    return (
+      <div className="evc-board" data-dsh-plugin="eval-console">
+        <div className="evc-noState" role="status">
+          <span className="evc-noStateTitle">{t('view.title')}</span>
+          <span className="evc-noStateBody">{t('view.noPreset')}</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (phase === 'error') {
     return (
       <div className="evc-board" data-dsh-plugin="eval-console">
         <div className="evc-error">
@@ -102,15 +156,21 @@ export function EvalConsoleView(_props: EvalConsoleViewProps): ReactElement {
     )
   }
 
-  if (snapshot === null) {
+  if (phase === 'no-chain') {
     return (
       <div className="evc-board" data-dsh-plugin="eval-console">
-        <span className="evc-empty">{loading ? t('view.loading') : t('view.error')}</span>
+        <div className="evc-noState" role="status">
+          <span className="evc-noStateTitle">{t('view.title')}</span>
+          <span className="evc-noStateBody">{t('view.noChain', { preset: preset ?? '' })}</span>
+        </div>
       </div>
     )
   }
 
-  const current = snapshot.current
+  // phase === 'ready' — snapshot is non-null here (phase derivation), but TS
+  // cannot narrow through evalViewPhaseOf; bind a local non-null reference.
+  const readySnapshot = snapshot as EvalSnapshot
+  const current = readySnapshot.current
 
   return (
     <div className="evc-root" data-dsh-plugin="eval-console">
@@ -118,7 +178,9 @@ export function EvalConsoleView(_props: EvalConsoleViewProps): ReactElement {
         <header className="evc-boardHeader">
           <h1 className="evc-boardTitle">{t('view.title')}</h1>
           <span className="evc-boardMeta">
-            {t('view.revision')} {snapshot.revision} · {t('view.generatedAt')} {fmtTime(snapshot.generatedAt)}
+            {t('view.scopedTo', { preset })} ·
+            {preset !== readySnapshot.logicalId ? ` ${readySnapshot.logicalId} ·` : ''}
+            {t('view.revision')} {readySnapshot.revision} · {t('view.generatedAt')} {fmtTime(readySnapshot.generatedAt)}
           </span>
         </header>
 
@@ -157,7 +219,7 @@ export function EvalConsoleView(_props: EvalConsoleViewProps): ReactElement {
         )}
 
         <div className="evc-columns" role="list" aria-label={t('view.columns')}>
-          {snapshot.columns.map((column) => (
+          {readySnapshot.columns.map((column) => (
             <section key={column.status} className="evc-column" role="listitem">
               <header className="evc-columnHeader">
                 <span className="evc-statusDot" data-status={column.status} aria-hidden="true" />
@@ -179,11 +241,11 @@ export function EvalConsoleView(_props: EvalConsoleViewProps): ReactElement {
 
         <section className="evc-timeline" aria-label={t('view.timeline')}>
           <h3 className="evc-timelineTitle">{t('view.timeline')}</h3>
-          {snapshot.timeline.length === 0 ? (
+          {readySnapshot.timeline.length === 0 ? (
             <div className="evc-empty">{t('view.emptyTimeline')}</div>
           ) : (
             <ol className="evc-timelineList">
-              {snapshot.timeline.slice(-40).map((event) => (
+              {readySnapshot.timeline.slice(-40).map((event) => (
                 <li key={event.id} className="evc-timelineItem">
                   <time className="evc-timelineTime">{fmtTime(event.ts)}</time>
                   <span className="evc-timelineEvent">{event.event}</span>
@@ -207,7 +269,7 @@ export function EvalConsoleView(_props: EvalConsoleViewProps): ReactElement {
       {selectedRow !== null ? (
         <EvalDetail
           row={selectedRow}
-          logicalId={snapshot.logicalId}
+          logicalId={readySnapshot.logicalId}
           t={t}
           transport={transport}
           onClose={() => setSelected(null)}

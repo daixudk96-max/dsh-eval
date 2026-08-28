@@ -756,6 +756,29 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* --- scoped board empty states (no-preset / no-chain) ------------------------ */
+
+.evc-noState {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 24px 4px;
+}
+
+.evc-noStateTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.evc-noStateBody {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  max-width: 420px;
+  line-height: 1.6;
+}
+
 /* --- preset version selector (session header dropdown) ----------------------- */
 
 .evc-versionRoot {

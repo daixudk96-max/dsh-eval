@@ -438,3 +438,100 @@ test('switch-revision: manifest mutations become the change note on the synced p
     await rm(dirs.root, { recursive: true, force: true })
   }
 })
+
+// ---- Cross-logical write actions (review F1): a non-evaluate preset's
+// detail / switch-revision must resolve and sync under ITS OWN logical id,
+// never the config default 'evaluate'. ----
+
+const EVOLVER_REV = 'system-evolver-5fac7f0b'
+const EVOLVER_DIGEST = '5fac7f0b00000000000000000000000000000000000000000000000000000000'
+const EVOLVER_FILES = { 'preset.yml': 'name: 进化工作台\n', 'agent.cordis.yml': 'rows\n' }
+
+function evolverRegistry() {
+  return {
+    async resolveCurrent(id) {
+      return id === 'system-evolver'
+        ? { logicalId: id, revisionId: EVOLVER_REV, digest: EVOLVER_DIGEST, gateRunId: 'evr-2', approvalId: 'a2', resolved: true }
+        : null
+    },
+    async history(id) {
+      return id === 'system-evolver'
+        ? [{ revisionId: EVOLVER_REV, digest: EVOLVER_DIGEST, digestShort: '5fac7f0b', status: 'active' }]
+        : []
+    },
+    async revisionContent(digest) {
+      assert.equal(digest, EVOLVER_DIGEST)
+      return { files: EVOLVER_FILES, text: Object.values(EVOLVER_FILES).join('\n') }
+    },
+    async revisionManifest() {
+      return { mutations: [{ summary: 'wire evolution tools' }] }
+    },
+  }
+}
+
+test('detail: a system-evolver revision resolves under its own logical, not evaluate', async () => {
+  const dirs = await tmpDirs()
+  try {
+    const service = new EvalConsoleHostService({
+      registry: evolverRegistry(),
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: 'evaluate', // config default is evaluate — must NOT be used
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+    })
+    const result = await service.apply('req-evolver-detail', { kind: 'detail', revisionId: EVOLVER_REV })
+    assert.equal(result.action, 'detail')
+    assert.equal(result.digest, EVOLVER_DIGEST)
+    assert.deepEqual(result.files, EVOLVER_FILES)
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true })
+  }
+})
+
+test('switch-revision: a system-evolver revision syncs to system-evolver-<digest8>, never evaluate', async () => {
+  const dirs = await tmpDirs()
+  try {
+    const service = new EvalConsoleHostService({
+      registry: evolverRegistry(),
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: 'evaluate',
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+    })
+    const result = await service.apply('req-evolver-switch', { kind: 'switch-revision', revisionId: EVOLVER_REV })
+    assert.equal(result.action, 'switch-revision')
+    // The target directory is the evolver's own, not evaluate's.
+    assert.equal(result.targetDir, path.join(dirs.agentPresetsRoot, 'system-evolver-5fac7f0b'))
+    assert.ok(!result.targetDir.includes('evaluate-'), 'must not write into an evaluate-* directory')
+    // The audit record carries the evolver logical id.
+    const audit = await readAuditEntries(dirs.auditFile)
+    assert.equal(audit.length, 1)
+    assert.equal(audit[0].event, 'switch-to-revision')
+    assert.equal(audit[0].logicalId, 'system-evolver')
+    assert.equal(audit[0].revisionId, EVOLVER_REV)
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true })
+  }
+})
+
+test('rollback: a revision whose derived logical mismatches the action logicalId is refused', async () => {
+  const dirs = await tmpDirs()
+  try {
+    const service = new EvalConsoleHostService({
+      registry: evolverRegistry(),
+      registryRoot: path.join(dirs.root, 'registry'),
+      logicalId: 'evaluate',
+      auditFile: dirs.auditFile,
+      agentPresetsRoot: dirs.agentPresetsRoot,
+    })
+    // action.logicalId = evaluate, but the revision derives system-evolver.
+    await assert.rejects(
+      service.apply('req-mismatch', { kind: 'rollback', logicalId: 'evaluate', revisionId: EVOLVER_REV, confirm: `ROLLBACK:${EVOLVER_REV}` }),
+      /rollback logicalId mismatch: evaluate != system-evolver/,
+    )
+    // Nothing was written to the ledger.
+    assert.deepEqual(await readAuditEntries(dirs.auditFile), [])
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true })
+  }
+})

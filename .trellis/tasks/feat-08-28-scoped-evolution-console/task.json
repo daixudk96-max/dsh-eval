@@ -1,0 +1,11 @@
+{
+  "title": "进化控制台按当前会话 preset 作用域与版本级动作重构",
+  "status": "in_progress",
+  "work": {
+    "type": "feat",
+    "mode": "standard",
+    "stage": "prd",
+    "execution_lane": "standard"
+  },
+  "description": "默认绑定当前会话 preset；无版本链显示空状态；明确区分查看、同步为新会话可选版本、回滚 current 指针；回滚仅历史链 previous 版本。"
+}

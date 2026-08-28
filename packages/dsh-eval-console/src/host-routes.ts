@@ -17,6 +17,7 @@ import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { EvalConsoleHostService } from './host-service.ts'
 import { writeJson } from './http.ts'
 import { parseActionEnvelope, EVAL_API_PREFIX } from './domain/protocol.ts'
+import { baseLogicalId } from './domain/revision-id.ts'
 
 const ACTION_LIMIT = 64 * 1024
 const HEARTBEAT_MS = 15_000
@@ -31,21 +32,6 @@ const LOGICAL_ID_RE = /^[a-z0-9][a-z0-9-]*$/
 
 /** Session ids feed sessionPersistence.inspect — accept the uuid shape only. */
 const SESSION_ID_RE = /^(?:session-)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
-
-/**
- * Map a versioned preset dir id (`<logicalId>-<digest8>`, e.g.
- * `evaluate-0c3922a0`) back to the registry logical id (`evaluate`).
- * Sessions record the synced directory id as their preset, but the registry
- * chain lives under the bare logical id; without this mapping the version
- * dropdown would find no chain for any versioned preset and render nothing.
- * Returns null when the id does not carry a hex-8 suffix.
- */
-export function baseLogicalId(id: string): string | null {
-  const m = /^(.+)-[0-9a-f]{8}$/.exec(id)
-  if (m === null) return null
-  const base = m[1]
-  return base === undefined || base === '' ? null : base
-}
 
 /** Loopback socket addresses (IPv4, IPv6, IPv4-mapped IPv6). */
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
