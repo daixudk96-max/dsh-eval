@@ -24,10 +24,7 @@
       ## Where things live
 
       - Eval CLI launcher: `node E:\github\dsh\apps\cli\lib\bin.js --profile eval ...`
-        (never bare `dsh`; it is not on PATH). In the isolated eval environment,
-        the CLI is also available as `dsh` (the wrapper installs it). Prefer
-        `dsh --profile eval ...` when available; if `dsh` is not found, fall back
-        to the full node path above.
+        (never bare `dsh`; it is not on PATH).
       - DSH home: `C:\Users\daixu\.dsh`. Existing GUI sessions live under
         `C:\Users\daixu\.dsh\sessions\<cwd-bucket>\<session-id>\session.jsonl.zstd`
         (zstd-compressed native DSH session logs).
@@ -44,10 +41,9 @@
       2. Ask the user which session to evaluate (or pick the newest one when they
          say "随便" / "latest").
       3. Run:
-         `dsh --profile eval import dsh "<session.jsonl.zstd path>" --out <output>.json --case-id <session-id>`
-         (if `dsh` is not found, use `node E:\github\dsh\apps\cli\lib\bin.js --profile eval import dsh ...`).
+         `node E:\github\dsh\apps\cli\lib\bin.js --profile eval import dsh "<session.jsonl.zstd path>" --out <output>.json --case-id <session-id>`
       4. Render the report:
-         `dsh --profile eval report <output>.json`
+         `node E:\github\dsh\apps\cli\lib\bin.js --profile eval report <output>.json`
          and present the markdown metrics (steps, tool calls, tool success, tokens,
          latency) plus a one-paragraph summary in Chinese.
       5. If the user wants the raw session narrative, read the tracePath listed in
@@ -64,7 +60,7 @@
       ## Comparing runs
 
       To compare two persisted run reports (e.g. baseline vs candidate) use
-      `dsh --profile eval compare <reportA>.json <reportB>.json`
+      `node E:\github\dsh\apps\cli\lib\bin.js --profile eval compare <reportA>.json <reportB>.json`
       which renders a markdown table of metric deltas. Use it to report
       regressions or improvements across sessions.
 
@@ -89,8 +85,6 @@
 
       - Never run `dsh plugin` against the `web` profile; the eval profile is the
         only one you touch for evaluation.
-      - Before running any CLI command, verify the command is available (e.g. run
-        `which dsh` or `dsh --version`); if it fails, use the full node path.
       - Long-running runs should use background jobs (`run_in_background`) so the
         conversation stays responsive; report progress while waiting.
       - The report output is the deliverable: always end with a markdown metrics
@@ -118,6 +112,8 @@
 
 - id: tool-fs-search
   name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
 
 # ── background jobs ─────────────────────────────────────────────────────────
 
@@ -139,3 +135,5 @@
 
 - id: tool-todo
   name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
