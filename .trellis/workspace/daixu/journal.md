@@ -157,3 +157,11 @@
   4. 大坑: web profile 的 node_modules/dsh-eval-console 是 symlink 指向源目录, Remove-Item 沿 symlink 把源 lib 删了 → 重新 build 恢复; 教训: 对 symlink 目标操作前先确认 LinkType。
   5. 根 .gitignore 新增(克隆仓库/run-short 产物/scratch), 防误提交。
 - 遗留: ① GUI 重启后用户确认头部下拉 + 新会话可选 evaluate-94a7c40b; ② executeRun README 参数说明未同步(benchmarkBaseline/benchmarkCandidate/timeoutMs); ③ 14 个 benchmark yaml 仍硬编码 provider: clipa(火山订阅失效), 建议批量切 ollama。
+
+## 2026-08-28 — 真实进化: 修复 evaluate 挂载缺陷(任务 08-28-feat-08-28-evolve-mount-fix, 已归档)
+- 背景: registry current evaluate-94a7c40b 的 agent.cordis.yml 缺 tool-fs-search/tool-todo 必填 config → GUI 挂载 agent-preset-invalid; 安装目录已手动修(f4ff95f), registry 内容寻址不可变 → 真实进化轮。
+- 变异(确定性不调 LLM): 补 config.sampleOverCapGlobResults: false + config.allowParallelInProgress: true。
+- 闭环: newRun evr-mtcgg88m-6bqa6r → cand-e5412bde0abed99e → seal evaluate-0c3922a0 → 真实评测(baseline 211s/candidate 559s, 均 taskSuccess 1.0) → gate PASS → promote(approval user-approved-mount-fix-2026-08-28) → 同步 ~/.dsh/.agent-presets/evaluate-0c3922a0 + RPC 挂载 ok:true。
+- 诚实标注: baseline 分数 0 = RPC 挂载失败映射(非评测分数); 两轮真实评测分数相同证明补 config 不改变评测行为。
+- 提交 0a6e4a6(11 文件); 回归 0 失败; 报告 research/evolution-mount-fix-report.md。
+- 教训: 评测子进程(wrapper 合并 overlay)不受 preset config 缺失影响——挂载性缺陷只能靠 RPC/GUI 验证, 评测分数测不出。
