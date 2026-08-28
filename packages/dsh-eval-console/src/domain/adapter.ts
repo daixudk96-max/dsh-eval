@@ -178,6 +178,7 @@ export function buildRows(
       digestShort: shortDigest(entry.digest),
       status: 'PROMOTED',
       isCurrent: entry.revisionId === currentRevisionId,
+      canRollback: entry.revisionId !== currentRevisionId,
       order: index,
       ...(fact?.runId === undefined ? {} : { runId: fact.runId }),
       ...(fact?.sealedAt === undefined ? {} : { sealedAt: fact.sealedAt }),

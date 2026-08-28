@@ -84,17 +84,23 @@ test('buildRows places history in PROMOTED and audit-only revisions by gate', ()
   const current = byId.get('evaluate-c4d8aec0')
   assert.equal(current?.status, 'PROMOTED')
   assert.equal(current?.isCurrent, true)
+  assert.equal(current?.canRollback, false)
   assert.equal(current?.order, 0)
 
   const previous = byId.get('evaluate-ab63a9b7')
   assert.equal(previous?.status, 'PROMOTED')
   assert.equal(previous?.isCurrent, false)
+  assert.equal(previous?.canRollback, true)
   assert.equal(previous?.order, 1)
 
-  // Audit-only (not in history) derive their status from the gate outcome.
+  // Audit-only (not in history) derive their status from the gate outcome,
+  // and never offer rollback (they are not on the registry history chain).
   assert.equal(byId.get('evaluate-ceb134ca')?.status, 'ACCEPTED')
+  assert.equal(byId.get('evaluate-ceb134ca')?.canRollback, undefined)
   assert.equal(byId.get('evaluate-9682331a')?.status, 'INCONCLUSIVE')
+  assert.equal(byId.get('evaluate-9682331a')?.canRollback, undefined)
   assert.equal(byId.get('evaluate-rej001')?.status, 'REJECTED')
+  assert.equal(byId.get('evaluate-rej001')?.canRollback, undefined)
   assert.equal(byId.get('evaluate-seal001')?.status, 'SEALED')
 
   // Gate reasons ride onto the audit-only rows.

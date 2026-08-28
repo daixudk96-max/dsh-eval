@@ -154,7 +154,7 @@ export function EvalDetail({ row, logicalId, t, transport, onClose, onRollbackDo
           {notice !== null ? <p className="evc-formError">{notice}</p> : null}
         </div>
         <footer className="evc-detailFooter">
-          {!row.isCurrent ? (
+          {row.canRollback === true ? (
             <button
               type="button"
               className="evc-dangerButton"

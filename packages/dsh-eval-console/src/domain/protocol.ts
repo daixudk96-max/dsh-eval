@@ -59,6 +59,13 @@ export interface EvalStatusRow {
   summary?: string
   /** True for the live current pointer. */
   isCurrent: boolean
+  /**
+   * True only for previous revisions on the registry history chain (the
+   * rollback window). Current and audit-only rows (REJECTED / INCONCLUSIVE /
+   * sealed-outside-window) must not offer rollback — the registry refuses
+   * rollback targets outside the chain.
+   */
+  canRollback?: boolean
   /** Position in the history chain: 0 = newest (current), then previous. */
   order: number
 }
