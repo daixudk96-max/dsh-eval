@@ -32,6 +32,21 @@ const LOGICAL_ID_RE = /^[a-z0-9][a-z0-9-]*$/
 /** Session ids feed sessionPersistence.inspect — accept the uuid shape only. */
 const SESSION_ID_RE = /^(?:session-)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
 
+/**
+ * Map a versioned preset dir id (`<logicalId>-<digest8>`, e.g.
+ * `evaluate-0c3922a0`) back to the registry logical id (`evaluate`).
+ * Sessions record the synced directory id as their preset, but the registry
+ * chain lives under the bare logical id; without this mapping the version
+ * dropdown would find no chain for any versioned preset and render nothing.
+ * Returns null when the id does not carry a hex-8 suffix.
+ */
+export function baseLogicalId(id: string): string | null {
+  const m = /^(.+)-[0-9a-f]{8}$/.exec(id)
+  if (m === null) return null
+  const base = m[1]
+  return base === undefined || base === '' ? null : base
+}
+
 /** Loopback socket addresses (IPv4, IPv6, IPv4-mapped IPv6). */
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
@@ -73,11 +88,19 @@ export function makeEvalRoutes(service: EvalConsoleHostService): WebRoute[] {
       if (!guard(req, res)) return
       // Optional ?logical=<presetId>: the UI asks for the current session's
       // preset; without the parameter the configured logicalId is served.
-      const logical = new URL(req.url ?? '/', 'http://localhost').searchParams.get('logical')
-      if (logical !== null && !LOGICAL_ID_RE.test(logical)) {
+      // A versioned preset dir id (<logicalId>-<digest8>) is normalized back
+      // to its registry logical id when the exact id has no chain.
+      const raw = new URL(req.url ?? '/', 'http://localhost').searchParams.get('logical')
+      if (raw !== null && !LOGICAL_ID_RE.test(raw)) {
         return writeJson(res, 400, { ok: false, error: 'invalid-logical' }, { 'cache-control': 'no-store' })
       }
-      writeJson(res, 200, await service.snapshot(logical ?? undefined), { 'cache-control': 'no-store' })
+      const logical = raw === null ? undefined : raw
+      let snapshot = await service.snapshot(logical)
+      if (logical !== undefined && snapshot.current === null && snapshot.history.length === 0) {
+        const base = baseLogicalId(logical)
+        if (base !== null && base !== logical) snapshot = await service.snapshot(base)
+      }
+      writeJson(res, 200, snapshot, { 'cache-control': 'no-store' })
     },
   }
 
