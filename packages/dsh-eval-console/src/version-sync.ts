@@ -34,7 +34,7 @@ export const OWNER_PACKAGE = 'dsh-eval-console'
 /** The owner marker written into every synchronized preset directory. */
 export interface SyncOwner {
   package: string
-  kind: 'revision'
+  kind: 'revision' | 'body'
   revisionId: string
   digest: string
   syncedAt: string
@@ -78,19 +78,41 @@ const DIGEST_RE = /^[0-9a-f]{64}$/
 
 /**
  * Decorate a preset.yml copy for a versioned directory: append ` · <digest8>`
- * to `name` and `。本版变更: <note>` to `description`. Lines are matched with
- * `^name:` / `^description:` anchors; when either line is absent the text is
- * returned unchanged.
+ * to `name` and `。本版变更: <note>` to `description`.
+ *
+ * Input contract: the registry revision's preset.yml, which DSH generates
+ * through `renderPresetMetadata` (js-yaml dump with `lineWidth: -1`), so
+ * every field is exactly one line and each value a plain (unquoted) scalar.
+ * Decoration re-renders each string value with `JSON.stringify` — a valid
+ * YAML double-quoted scalar — instead of splicing text into the line:
+ * change notes routinely contain `: ` (colon-space), which is illegal inside
+ * a YAML plain scalar and would make the whole file unparsable, silently
+ * emptying DSH's picker metadata. When none of the known fields is present
+ * the text is returned unchanged.
  */
 export function decoratePresetYml(text: string, digest: string, changeNote: string): string {
   const tag = digest.slice(0, 8)
-  let out = text.replace(/^name:\s*(.+)$/m, (_m, name: string) => `name: ${name.trim()} · ${tag}`)
-  out = out.replace(/^description:\s*(.+)$/m, (_m, desc: string) => {
-    const trimmed = desc.trim()
-    const sep = /[。.!?！？]$/.test(trimmed) ? '' : '。'
-    return `description: ${trimmed}${sep}本版变更: ${changeNote}`
-  })
-  return out
+  let name: string | undefined
+  let description: string | undefined
+  let order: number | undefined
+  for (const line of text.split(/\r?\n/)) {
+    const nameMatch = /^name:\s*(.+)$/.exec(line)
+    const descMatch = /^description:\s*(.+)$/.exec(line)
+    const orderMatch = /^order:\s*(-?\d+)$/.exec(line)
+    if (nameMatch !== null && name === undefined) name = nameMatch[1]!.trim()
+    else if (descMatch !== null && description === undefined) description = descMatch[1]!.trim()
+    else if (orderMatch !== null && order === undefined) order = Number(orderMatch[1])
+  }
+  if (name === undefined && description === undefined && order === undefined) return text
+
+  const out: string[] = []
+  if (name !== undefined) out.push(`name: ${JSON.stringify(`${name} · ${tag}`)}`)
+  if (description !== undefined) {
+    const sep = /[。.!?！？]$/.test(description) ? '' : '。'
+    out.push(`description: ${JSON.stringify(`${description}${sep}本版变更: ${changeNote}`)}`)
+  }
+  if (order !== undefined) out.push(`order: ${order}`)
+  return `${out.join('\n')}\n`
 }
 
 /** Reject any path that could escape the target directory. */
@@ -111,10 +133,11 @@ async function readOwner(dir: string): Promise<SyncOwner | null> {
     const parsed: unknown = JSON.parse(await readFile(path.join(dir, OWNER_FILE), 'utf8'))
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
     const owner = parsed as Record<string, unknown>
-    if (typeof owner.package !== 'string' || owner.kind !== 'revision') return null
+    if (typeof owner.package !== 'string') return null
+    if (owner.kind !== 'revision' && owner.kind !== 'body') return null
     return {
       package: owner.package,
-      kind: 'revision',
+      kind: owner.kind,
       revisionId: typeof owner.revisionId === 'string' ? owner.revisionId : '',
       digest: typeof owner.digest === 'string' ? owner.digest : '',
       syncedAt: typeof owner.syncedAt === 'string' ? owner.syncedAt : '',
@@ -154,9 +177,7 @@ export async function syncRevision(options: SyncRevisionOptions): Promise<SyncRe
   const ownerPackage = options.ownerPackage ?? OWNER_PACKAGE
 
   if (!DIGEST_RE.test(digest)) throw new Error(`invalid revision digest: ${digest.slice(0, 12)}…`)
-  if (logicalId === '' || logicalId === '.' || logicalId === '..' || /[/\\]/.test(logicalId)) {
-    throw new Error(`unsafe logical id: ${logicalId}`)
-  }
+  assertSafeLogicalId(logicalId)
 
   // Decorate the synced copy of preset.yml (never the registry content) with
   // the version tag and the change note when one is provided.
@@ -167,16 +188,128 @@ export async function syncRevision(options: SyncRevisionOptions): Promise<SyncRe
 
   const targetId = `${logicalId}-${digest.slice(0, 8)}`
   const dir = path.join(agentPresetsRoot, targetId)
+  const core = await syncDirTo({
+    dir, files: outFiles, digest, ownerKind: 'revision',
+    allowUnowned: false, ownerPackage, ownerRevisionId: targetId,
+  })
+  return { dir, targetId, ...core }
+}
+
+/**
+ * Options for {@link syncBody} — the default-preset body synchronizer.
+ */
+export interface SyncBodyOptions {
+  /** $DSH_HOME/.agent-presets (or ~/.dsh/.agent-presets). */
+  agentPresetsRoot: string
+  /** The registry logical id, e.g. 'evaluate'. */
+  logicalId: string
+  /** 64-hex content digest of the revision to sync. */
+  digest: string
+  /** Revision content files (relative path -> text), written UNDECORATED. */
+  files: Record<string, string>
+  /** Owner package recorded in the marker. Default 'dsh-eval-console'. */
+  ownerPackage?: string
+  /** Human-readable revision id recorded in the marker; defaults to digest8. */
+  revisionId?: string
+  /**
+   * Adopt a body directory that exists WITHOUT an owner marker (typically a
+   * manually created default-preset body), writing the marker on adoption.
+   * A directory owned by any other package is always refused. Default false.
+   */
+  adopt?: boolean
+}
+
+export interface SyncBodyResult {
+  /** Absolute target directory. */
+  dir: string
+  /** Files actually written by this call. */
+  written: string[]
+  /** Files already present with identical content. */
+  skipped: string[]
+  /** True when the target directory already existed before this call. */
+  existed: boolean
+  /** True when an unowned (marker-less) directory was adopted. */
+  adopted: boolean
+}
+
+/**
+ * Synchronize the CURRENT registry revision (undecorated) into the default
+ * preset body directory `<agentPresetsRoot>/<logicalId>/` — the directory a
+ * deployment's `agent-presets.default` points at. Each promote writes the new
+ * current revision here, so the default preset the new-session picker starts
+ * follows registry evolution instead of going stale.
+ *
+ * Unlike {@link syncRevision}, the body is identity-stable: no digest tag and
+ * no change note decorate its preset.yml. Version identity belongs to the
+ * versioned directories; the body is the live pointer to the current one.
+ * @throws when the digest or a file path is unsafe, when the target exists
+ *   and is owned by another package, or on any filesystem failure (staging
+ *   cleanup guaranteed).
+ */
+export async function syncBody(options: SyncBodyOptions): Promise<SyncBodyResult> {
+  const { agentPresetsRoot, logicalId, digest, files } = options
+  const ownerPackage = options.ownerPackage ?? OWNER_PACKAGE
+
+  if (!DIGEST_RE.test(digest)) throw new Error(`invalid revision digest: ${digest.slice(0, 12)}…`)
+  assertSafeLogicalId(logicalId)
+
+  const dir = path.join(agentPresetsRoot, logicalId)
+  const core = await syncDirTo({
+    dir, files, digest, ownerKind: 'body',
+    allowUnowned: options.adopt === true, ownerPackage,
+    ownerRevisionId: options.revisionId ?? digest.slice(0, 8),
+  })
+  return { dir, ...core }
+}
+
+/** Reject unsafe logical ids (path segments, separators, dot-forms). */
+function assertSafeLogicalId(logicalId: string): void {
+  if (logicalId === '' || logicalId === '.' || logicalId === '..' || /[/\\]/.test(logicalId)) {
+    throw new Error(`unsafe logical id: ${logicalId}`)
+  }
+}
+
+interface SyncDirOptions {
+  /** Absolute target directory. */
+  dir: string
+  /** Files (relative path -> text); already decorated by the caller when applicable. */
+  files: Record<string, string>
+  /** 64-hex digest used for the idempotence check. */
+  digest: string
+  /** Owner marker kind: 'revision' for versioned dirs, 'body' for the default body. */
+  ownerKind: 'revision' | 'body'
+  /** Whether a marker-less existing directory may be adopted (body only). */
+  allowUnowned: boolean
+  /** Owner package recorded in the marker. */
+  ownerPackage: string
+  /** Human-readable revision identity recorded in the marker. */
+  ownerRevisionId: string
+}
+
+/**
+ * Shared commit core: owner-guarded idempotent atomic write of a file set
+ * into one preset directory. See {@link syncRevision} / {@link syncBody}.
+ */
+async function syncDirTo(options: SyncDirOptions): Promise<{
+  written: string[]
+  skipped: string[]
+  existed: boolean
+  adopted: boolean
+}> {
+  const { dir, files, digest, ownerKind, allowUnowned, ownerPackage, ownerRevisionId } = options
 
   const kind = await pathKind(dir)
   if (kind === 'file') throw new Error(`refusing to overwrite ${dir} (not a directory)`)
   const existed = kind === 'dir'
   let owner: SyncOwner | null = null
+  let adopted = false
   if (existed) {
     owner = await readOwner(dir)
-    if (owner === null || owner.package !== ownerPackage) {
-      const ownerName = owner === null ? '(missing)' : owner.package
-      throw new Error(`refusing to overwrite ${dir} (owned by ${ownerName})`)
+    if (owner === null) {
+      if (!allowUnowned) throw new Error(`refusing to overwrite ${dir} (owned by (missing))`)
+      adopted = true
+    } else if (owner.package !== ownerPackage) {
+      throw new Error(`refusing to overwrite ${dir} (owned by ${owner.package})`)
     }
   }
 
@@ -184,15 +317,15 @@ export async function syncRevision(options: SyncRevisionOptions): Promise<SyncRe
   // reported as written.
   const written: string[] = []
   const skipped: string[] = []
-  for (const rel of Object.keys(outFiles)) {
+  for (const rel of Object.keys(files)) {
     assertSafeRelativePath(rel)
-    if (existed && (await fileEquals(path.join(dir, rel), outFiles[rel]!))) skipped.push(rel)
+    if (existed && (await fileEquals(path.join(dir, rel), files[rel]!))) skipped.push(rel)
     else written.push(rel)
   }
 
   const ownerCurrent = owner !== null && owner.package === ownerPackage && owner.digest === digest
   if (written.length === 0 && ownerCurrent) {
-    return { dir, targetId, written: [], skipped, existed }
+    return { written: [], skipped, existed, adopted }
   }
 
   // Atomic commit: stage every file + the owner marker, then displace the
@@ -204,15 +337,15 @@ export async function syncRevision(options: SyncRevisionOptions): Promise<SyncRe
   let movedAside = false
   try {
     await mkdir(staging, { recursive: true })
-    for (const [rel, text] of Object.entries(outFiles)) {
+    for (const [rel, text] of Object.entries(files)) {
       const abs = path.join(staging, rel)
       await mkdir(path.dirname(abs), { recursive: true })
       await writeFile(abs, text, 'utf8')
     }
     const ownerEntry: SyncOwner = {
       package: ownerPackage,
-      kind: 'revision',
-      revisionId: targetId,
+      kind: ownerKind,
+      revisionId: ownerRevisionId,
       digest,
       syncedAt: new Date().toISOString(),
     }
@@ -229,5 +362,5 @@ export async function syncRevision(options: SyncRevisionOptions): Promise<SyncRe
     throw error
   }
 
-  return { dir, targetId, written, skipped, existed }
+  return { written, skipped, existed, adopted }
 }

@@ -3,6 +3,9 @@ research/dsh-*/
 research/llm-space/
 _compare/
 
+# Dependencies (evolution-controller has no package.json of its own)
+node_modules/
+
 # Scratch / probes
 .scratch/
 

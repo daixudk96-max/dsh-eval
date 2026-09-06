@@ -424,10 +424,16 @@ test('switch-revision: manifest mutations become the change note on the synced p
     const result = await service.apply('req-note', { kind: 'switch-revision', revisionId: PREV_REV })
     assert.equal(result.action, 'switch-revision')
     const written = await readFile(path.join(result.targetDir, 'preset.yml'), 'utf8')
-    assert.match(written, /^name: 评测 · ab63a9b7$/m)
-    assert.match(
-      written,
-      /本版变更: tool-fs-search 补 config\.sampleOverCapGlobResults: false; tool-todo 补 config\.allowParallelInProgress: true/,
+    assert.match(written, /^name: "评测 · ab63a9b7"$/m)
+    const descLine = written.split('\n').find((line) => line.startsWith('description: '))
+    assert.ok(descLine)
+    // The decorated description is a quoted YAML scalar, so the change note's
+    // own `: ` (mutation summaries routinely contain it) cannot break parsing.
+    assert.match(descLine, /^description: "/)
+    assert.ok(
+      JSON.parse(descLine.slice('description: '.length)).includes(
+        '本版变更: tool-fs-search 补 config.sampleOverCapGlobResults: false; tool-todo 补 config.allowParallelInProgress: true',
+      ),
     )
     // The audit line records the switch with the digest.
     const audit = await readAuditEntries(dirs.auditFile)

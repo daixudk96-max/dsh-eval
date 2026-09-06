@@ -12,7 +12,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { OWNER_FILE, OWNER_PACKAGE, syncRevision } from '../src/version-sync.ts'
+import { OWNER_FILE, OWNER_PACKAGE, syncBody, syncRevision } from '../src/version-sync.ts'
 
 const DIGEST = '94a7c40b8283ddf70559106c172bb6700b21610711c9ce8376ab04b2164dfe71'
 const DIGEST8 = '94a7c40b'
@@ -192,18 +192,34 @@ test('rejects an invalid digest and an unsafe logical id', async () => {
   }
 })
 
-test('decoratePresetYml appends version tag to name and change note to description', async () => {
+test('decoratePresetYml re-renders values as quoted YAML scalars (colon-space notes stay parsable)', async () => {
   const { decoratePresetYml } = await import('../src/version-sync.ts')
   const yml = 'name: 评测\ndescription: 评测 DSH 会话与基准。\norder: 2\n'
-  const out = decoratePresetYml(yml, DIGEST, 'tool-fs-search 补 config; tool-todo 补 config')
-  assert.match(out, /^name: 评测 · 94a7c40b$/m)
-  assert.match(out, /^description: 评测 DSH 会话与基准。本版变更: tool-fs-search 补 config; tool-todo 补 config$/m)
-  assert.match(out, /^order: 2$/m)
+  const note =
+    'tool-fs-search 补 config.sampleOverCapGlobResults: false; tool-todo 补 config.allowParallelInProgress: true'
+  const out = decoratePresetYml(yml, DIGEST, note)
+  const lines = out.trimEnd().split('\n')
+  assert.equal(lines.length, 3)
+  // Both string values are re-rendered as double-quoted YAML scalars, so a
+  // `: ` inside the change note can never become a nested mapping entry.
+  assert.equal(lines[0], `name: "评测 · ${DIGEST8}"`)
+  assert.match(lines[1], /^description: "/)
+  const desc = JSON.parse(lines[1].slice('description: '.length))
+  assert.equal(desc, `评测 DSH 会话与基准。本版变更: ${note}`)
+  assert.equal(lines[2], 'order: 2')
   // No name/description lines → returned unchanged.
   assert.equal(decoratePresetYml('model: x\n', DIGEST, 'note'), 'model: x\n')
 })
 
-test('syncRevision with changeNote writes a decorated preset.yml copy', async () => {
+test('decoratePresetYml keeps values intact when they already contain colons', async () => {
+  const { decoratePresetYml } = await import('../src/version-sync.ts')
+  const yml = 'name: 评测\ndescription: 评测 DSH 会话与基准：默认导入。\n'
+  const out = decoratePresetYml(yml, DIGEST, '修复 x: y')
+  const lines = out.trimEnd().split('\n')
+  assert.equal(JSON.parse(lines[1].slice('description: '.length)), '评测 DSH 会话与基准：默认导入。本版变更: 修复 x: y')
+})
+
+test('syncRevision with changeNote writes a parsable decorated preset.yml copy', async () => {
   const root = await tmpRoot()
   try {
     const files = {
@@ -218,8 +234,15 @@ test('syncRevision with changeNote writes a decorated preset.yml copy', async ()
       changeNote: 'tool-fs-search 补 config.sampleOverCapGlobResults: false',
     })
     const written = await readFile(path.join(result.dir, 'preset.yml'), 'utf8')
-    assert.match(written, /^name: 评测 · 94a7c40b$/m)
-    assert.match(written, /本版变更: tool-fs-search 补 config\.sampleOverCapGlobResults: false/)
+    assert.match(written, /^name: "评测 · 94a7c40b"$/m)
+    const descLine = written.split('\n').find((l) => l.startsWith('description: '))
+    assert.ok(descLine)
+    assert.match(descLine, /^description: "/)
+    assert.ok(
+      JSON.parse(descLine.slice('description: '.length)).includes(
+        '本版变更: tool-fs-search 补 config.sampleOverCapGlobResults: false',
+      ),
+    )
     // The input files object is never mutated.
     assert.equal(files['preset.yml'], 'name: 评测\ndescription: 评测 DSH 会话与基准。\norder: 2\n')
     // Idempotent re-sync with the same changeNote skips everything.
@@ -232,6 +255,98 @@ test('syncRevision with changeNote writes a decorated preset.yml copy', async ()
     })
     assert.deepEqual(again.written, [])
     assert.deepEqual(again.skipped.sort(), ['agent.cordis.yml', 'preset.yml'])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+// ---- syncBody: the default-preset body follows the registry current ----
+
+test('syncBody writes an undecorated body directory with a body owner marker', async () => {
+  const root = await tmpRoot()
+  try {
+    const files = {
+      'preset.yml': 'name: 评测\ndescription: 评测 DSH 会话与基准：本版变更: x: y。\n',
+      'agent.cordis.yml': 'rows\n',
+    }
+    const result = await syncBody({ agentPresetsRoot: root, logicalId: 'evaluate', digest: DIGEST, files })
+    assert.equal(result.dir, path.join(root, 'evaluate'))
+    assert.equal(result.existed, false)
+    assert.equal(result.adopted, false)
+    assert.deepEqual(result.written.sort(), Object.keys(files).sort())
+    // Undecorated: the raw registry content is written verbatim (even `: `).
+    assert.equal(await readFile(path.join(result.dir, 'preset.yml'), 'utf8'), files['preset.yml'])
+    const owner = await readJson(path.join(result.dir, OWNER_FILE))
+    assert.equal(owner.package, OWNER_PACKAGE)
+    assert.equal(owner.kind, 'body')
+    assert.equal(owner.revisionId, DIGEST8)
+    assert.equal(owner.digest, DIGEST)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('syncBody refuses an unowned existing directory unless adopt is set', async () => {
+  const root = await tmpRoot()
+  try {
+    const dir = path.join(root, 'evaluate')
+    await mkdir(dir, { recursive: true })
+    await writeFile(path.join(dir, 'preset.yml'), 'manual content\n', 'utf8')
+    await assert.rejects(
+      syncBody({ agentPresetsRoot: root, logicalId: 'evaluate', digest: DIGEST, files: FILES }),
+      /owned by \(missing\)/,
+    )
+    assert.equal(await readFile(path.join(dir, 'preset.yml'), 'utf8'), 'manual content\n')
+    // adopt: true takes over the marker-less manual directory and writes the marker.
+    const result = await syncBody({ agentPresetsRoot: root, logicalId: 'evaluate', digest: DIGEST, files: FILES, adopt: true })
+    assert.equal(result.adopted, true)
+    assert.equal(result.existed, true)
+    const owner = await readJson(path.join(dir, OWNER_FILE))
+    assert.equal(owner.kind, 'body')
+    assert.equal(await readFile(path.join(dir, 'preset.yml'), 'utf8'), FILES['preset.yml'])
+    // No staging/backup residue.
+    assert.deepEqual(await listDir(root), ['evaluate'])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('syncBody always refuses a directory owned by another package', async () => {
+  const root = await tmpRoot()
+  try {
+    const dir = path.join(root, 'evaluate')
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      path.join(dir, OWNER_FILE),
+      JSON.stringify({ package: 'other-plugin', kind: 'body', revisionId: 'x', digest: DIGEST, syncedAt: '2026-01-01T00:00:00.000Z' }),
+      'utf8',
+    )
+    await assert.rejects(
+      syncBody({ agentPresetsRoot: root, logicalId: 'evaluate', digest: DIGEST, files: FILES, adopt: true }),
+      /owned by other-plugin/,
+    )
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('syncBody is idempotent per digest and replaces content on a new digest', async () => {
+  const root = await tmpRoot()
+  try {
+    const first = await syncBody({ agentPresetsRoot: root, logicalId: 'evaluate', digest: DIGEST, files: FILES })
+    assert.equal(first.written.length, 2)
+    const again = await syncBody({ agentPresetsRoot: root, logicalId: 'evaluate', digest: DIGEST, files: FILES })
+    assert.deepEqual(again.written, [])
+    assert.deepEqual(again.skipped.sort(), Object.keys(FILES).sort())
+    // A new current revision replaces the body content.
+    const nextDigest = 'b'.repeat(64)
+    const changed = { ...FILES, 'preset.yml': 'model: evaluate-v8\n' }
+    const next = await syncBody({ agentPresetsRoot: root, logicalId: 'evaluate', digest: nextDigest, files: changed })
+    assert.deepEqual(next.written, ['preset.yml'])
+    assert.deepEqual(next.skipped, ['prompt/system.txt'])
+    assert.equal(await readFile(path.join(root, 'evaluate', 'preset.yml'), 'utf8'), 'model: evaluate-v8\n')
+    const owner = await readJson(path.join(root, 'evaluate', OWNER_FILE))
+    assert.equal(owner.digest, nextDigest)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

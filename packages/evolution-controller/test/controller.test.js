@@ -192,3 +192,52 @@ test('controller: CAS protection — stale expectedCurrent is rejected at regist
     'promote with a stale expectedCurrent must fail instead of overwriting',
   );
 });
+
+test('controller: onPromoted hook runs after a successful promote', async (t) => {
+  const { registry, controller } = await makeEnv(t);
+  const src = await seedRevision(registry);
+  const run = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-hook-1' });
+  await controller.createCandidate(run.id, {
+    logicalId: 'coding', sourceRevisionId: src,
+    hypothesis: 'hook test', evidence: ['c1'],
+    mutations: [{ kind: 'prompt', op: 'rewrite' }], readCandidateFiles: candidateFiles,
+  });
+  await controller.seal(run.id);
+  await controller.evaluate(run.id, {
+    baseline: { overall: 0.6, correctness: 0.8, safety: 0.9, verification: 0.7 },
+    candidate: { overall: 0.8, correctness: 0.85, safety: 0.9, verification: 0.75 },
+  });
+  const calls = [];
+  controller.onPromoted = async (info) => { calls.push(info); };
+  const result = await controller.promote(run.id, { logicalId: 'coding', approvalId: 'approve-hook' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].logicalId, 'coding');
+  assert.equal(calls[0].revisionId, result.revisionId);
+  assert.equal(calls[0].digest, result.digest);
+  assert.equal(calls[0].runId, run.id);
+});
+
+test('controller: a throwing onPromoted hook is audited and never unwinds the promote', async (t) => {
+  const { root, registry, controller } = await makeEnv(t);
+  const src = await seedRevision(registry);
+  const run = await controller.newRun({ source: 'coding', triggerEvaluationRunId: 'eval-hook-2' });
+  await controller.createCandidate(run.id, {
+    logicalId: 'coding', sourceRevisionId: src,
+    hypothesis: 'hook throw test', evidence: ['c1'],
+    mutations: [{ kind: 'prompt', op: 'rewrite' }], readCandidateFiles: candidateFiles,
+  });
+  await controller.seal(run.id);
+  await controller.evaluate(run.id, {
+    baseline: { overall: 0.6, correctness: 0.8, safety: 0.9, verification: 0.7 },
+    candidate: { overall: 0.8, correctness: 0.85, safety: 0.9, verification: 0.75 },
+  });
+  controller.onPromoted = async () => { throw new Error('sync boom'); };
+  const result = await controller.promote(run.id, { logicalId: 'coding', approvalId: 'approve-hook2' });
+  // The pointer moved; the hook failure must not unwind the promote.
+  assert.equal(run.state, 'PROMOTED');
+  assert.equal(result.revisionId, (await controller.registry.resolveCurrent('coding')).revisionId);
+  const ledger = await readLedger(path.join(root, 'audit'));
+  const failed = ledger.find((e) => e.event === 'preset-body-sync-failed');
+  assert.ok(failed, 'audit must record the sync failure');
+  assert.match(failed.error, /sync boom/);
+});

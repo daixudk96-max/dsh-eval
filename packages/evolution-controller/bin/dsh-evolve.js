@@ -60,6 +60,7 @@ function usage() {
   dsh-evolve.js --benchmark <yaml> --registry <root> --logical <id>
       [--candidate <dir>] [--split dev|guard] [--approve <approvalId>]
       [--min-effect 0.05] [--dsh <launcher>] [--out <dir>]
+      [--agent-presets <dir>]
 
 参数:
   --benchmark <yaml>     必填: 评测基准(双跑同一基准)
@@ -81,6 +82,9 @@ function usage() {
   --budget-limit <usd>   可选: 进化预算上限 USD(> 0); 已花 ≥ 上限时 newRun 被拒
   --dsh <launcher>       默认: node E:\\github\\dsh\\apps\\cli\\lib\\bin.js
   --out <dir>            默认 ./evolve-out, 写 baseline.json/candidate.json/gate.json/result.json
+  --agent-presets <dir>  可选: 预设安装根(默认 <registry 上级>/.agent-presets);
+                         promote 成功后把 new current 同步到 <root>/<logical> 本体
+                         (default 预设跟随, 首次无 owner marker 目录自动接管)
 
 归档模式(不启动评测, 只要求 --registry):
   --export <path>        导出整个 registry 为自校验 JSON 快照
@@ -313,7 +317,41 @@ async function main() {
       budget = { dir: path.resolve(budgetDir), limitUsd: budgetLimit };
     }
   }
-  const controller = new EvolutionController({ registry, auditDir, ...(budget ? { budget } : {}) });
+  // 本体跟随 (default 预设): promote 成功后把 new current revision(未装饰)
+  // 同步到 <agentPresetsRoot>/<logical>。version-sync 在 dsh-eval-console 包,
+  // require 失败(裁剪部署)时跳过 —— promote 本身不受影响。
+  const agentPresetsRoot = args['agent-presets']
+    ? path.resolve(args['agent-presets'])
+    : path.join(registryRoot, '..', '.agent-presets');
+  let bodySync = null;
+  try {
+    const syncPath = path.join(__dirname, '..', '..', '..', 'dsh-eval-console', 'src', 'version-sync.ts');
+    ({ syncBody: bodySync } = require(syncPath));
+  } catch (e) {
+    console.warn('warn: version-sync 不可用, promote 后跳过 default 本体同步');
+  }
+  const controller = new EvolutionController({
+    registry,
+    auditDir,
+    ...(budget ? { budget } : {}),
+    ...(bodySync
+      ? {
+          onPromoted: async ({ logicalId: lId, revisionId, digest }) => {
+            const content = await registry.revisionContent(digest);
+            if (!content || !content.files) throw new Error('body sync: revision content unavailable');
+            const result = await bodySync({
+              agentPresetsRoot,
+              logicalId: lId,
+              digest,
+              files: content.files,
+              revisionId,
+              adopt: true,
+            });
+            console.log(`✓ body synced: ${lId} ← ${revisionId} (${result.written.length} written, ${result.skipped.length} skipped${result.adopted ? ', adopted' : ''})`);
+          },
+        }
+      : {}),
+  });
 
   // 1. current 内容
   const { files: currentContent, current } = await currentFiles(registry, logicalId);

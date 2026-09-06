@@ -35,8 +35,13 @@ class EvolutionController {
    *   restore current content to the candidate's source revision and record
    *   the intent in the audit ledger — but never auto-apply; applying always
    *   requires explicit approval via applyRollback.
+   * @param {Function} [opts.onPromoted] async ({ runId, logicalId,
+   *   revisionId, digest }) => void invoked after a successful promote (the
+   *   pointer has already moved), so the host can sync the default-preset
+   *   body to the new current revision. A throw is caught, audited as
+   *   `preset-body-sync-failed` and never unwinds the promote.
    */
-  constructor({ registry, auditDir, gateDefaults = {}, budget, redactValues = [], autoRollbackOnReject = false }) {
+  constructor({ registry, auditDir, gateDefaults = {}, budget, redactValues = [], autoRollbackOnReject = false, onPromoted }) {
     if (!registry) throw new Error('registry is required');
     this.registry = registry;
     this.auditDir = auditDir;
@@ -44,6 +49,7 @@ class EvolutionController {
     this.budget = budget ? new BudgetLedger(budget) : null;
     this.redactValues = redactValues;
     this.autoRollbackOnReject = autoRollbackOnReject;
+    this.onPromoted = typeof onPromoted === 'function' ? onPromoted : null;
     this.runs = new Map();
   }
 
@@ -318,6 +324,19 @@ class EvolutionController {
     run.promotedAt = new Date().toISOString();
     run.promotedRevision = result.revisionId;
     await this._audit({ runId, event: 'promoted', revisionId: result.revisionId, digest: result.digest, approvalId, gateRuleSet: gateResult.ruleSetVersion });
+    if (this.onPromoted) {
+      try {
+        await this.onPromoted({ runId, logicalId, revisionId: result.revisionId, digest: result.digest });
+      } catch (error) {
+        // The pointer already moved; a body-sync failure must not unwind the
+        // promote. Record it and let the operator sync manually.
+        await this._audit({
+          runId, event: 'preset-body-sync-failed', logicalId,
+          revisionId: result.revisionId, digest: result.digest,
+          error: String((error && error.message) || error),
+        });
+      }
+    }
     return result;
   }
 
